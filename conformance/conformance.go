@@ -28,15 +28,19 @@ import (
 
 	"github.com/stretchr/testify/require"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	clientsetscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	k8sconfig "sigs.k8s.io/controller-runtime/pkg/client/config"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	confflags "sigs.k8s.io/gateway-api/conformance/utils/flags"
-	gatewayk8utils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
+	apikubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	confsuite "sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/conformance/utils/tlog"
 	gatewayfeatures "sigs.k8s.io/gateway-api/pkg/features"
@@ -82,7 +86,7 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	// Register core K8s types (like v1.Secret for certs) to scheme, needed by client to create/manage these resources.
 	require.NoError(t, clientsetscheme.AddToScheme(scheme), "failed to add core Kubernetes types to scheme")
 	// Add Gateway API types
-	require.NoError(t, gatewayk8utils.InstallGatewayV1(scheme), "failed to install gatewayv1 types into scheme")
+	require.NoError(t, gatewayv1.Install(scheme), "failed to install gatewayv1 types into scheme")
 	// Add APIExtensions types (for CRDs)
 	require.NoError(t, apiextensionsv1.AddToScheme(scheme), "failed to add apiextensionsv1 types to scheme")
 
@@ -229,7 +233,7 @@ func SetupConformanceTestSuite(ctx context.Context, t *testing.T, suite *confsui
 	}
 
 	tlog.Logf(t, "Test Setup: Ensuring GatewayClass has been accepted")
-	suite.ControllerName = gatewayk8utils.GWCMustHaveAcceptedConditionTrue(t, suite.Client, suite.TimeoutConfig, suite.GatewayClassName)
+	suite.ControllerName = apikubernetes.GWCMustHaveAcceptedConditionTrue(t, suite.Client, suite.TimeoutConfig, suite.GatewayClassName)
 
 	suite.Applier.GatewayClass = suite.GatewayClassName
 	suite.Applier.ControllerName = suite.ControllerName
@@ -242,7 +246,7 @@ func SetupConformanceTestSuite(ctx context.Context, t *testing.T, suite *confsui
 		resources.InfraNamespace,
 		resources.AppBackendNamespace,
 	}
-	gatewayk8utils.NamespacesMustBeReady(t, suite.Client, suite.TimeoutConfig, namespaces)
+	apikubernetes.NamespacesMustBeReady(t, suite.Client, suite.TimeoutConfig, namespaces)
 
 	ensureGatewayAvailableAndReady(ctx, t, suite.Client, opts, resources.PrimaryGatewayNN)
 	ensureGatewayAvailableAndReady(ctx, t, suite.Client, opts, resources.SecondaryGatewayNN)
@@ -271,11 +275,57 @@ func getGatewayInferenceExtensionVersion(crds []apiextensionsv1.CustomResourceDe
 func ensureGatewayAvailableAndReady(ctx context.Context, t *testing.T, k8sClient client.Client, opts confsuite.ConformanceOptions, gatewayNN types.NamespacedName) {
 	t.Helper()
 
-	logDebugf(t, opts.Debug, "Waiting for shared Gateway %s/%s to be ready", gatewayNN.Namespace, gatewayNN.Name)
-	gatewayk8utils.GatewayMustHaveCondition(t, k8sClient, opts.TimeoutConfig, gatewayNN, gatewayk8utils.GetGatewayAcceptedCondition())
-	gatewayk8utils.GatewayMustHaveCondition(t, k8sClient, opts.TimeoutConfig, gatewayNN, gatewayk8utils.GetGatewayProgrammedCondition())
+	t.Logf("Attempting to fetch Gateway %s/%s.", gatewayNN.Namespace, gatewayNN.Name)
+	gw := &gatewayv1.Gateway{} // This gw instance will be populated by the poll function
 
-	_, err := gatewayk8utils.WaitForGatewayAddress(t, k8sClient, opts.TimeoutConfig, gatewayk8utils.NewGatewayRef(gatewayNN))
+	// Use extension-specific config for the polling interval defined in timeout.go.
+	extTimeoutConf := inferenceconfig.DefaultInferenceExtensionTimeoutConfig()
+
+	// Use the GatewayMustHaveAddress timeout from the suite's base TimeoutConfig for the Gateway object to appear.
+	waitForGatewayCreationTimeout := extTimeoutConf.GatewayMustHaveAddress
+
+	logDebugf(t, opts.Debug, "Waiting up to %v for Gateway object %s/%s to appear after manifest application...", waitForGatewayCreationTimeout, gatewayNN.Namespace, gatewayNN.Name)
+
+	pollErr := wait.PollUntilContextTimeout(ctx, extTimeoutConf.GatewayObjectPollInterval, waitForGatewayCreationTimeout, true, func(pollCtx context.Context) (bool, error) {
+		fetchErr := k8sClient.Get(pollCtx, gatewayNN, gw)
+		if fetchErr == nil {
+			t.Logf("Successfully fetched Gateway %s/%s. Spec.GatewayClassName: %s",
+				gw.Namespace, gw.Name, gw.Spec.GatewayClassName)
+			return true, nil
+		}
+		if apierrors.IsNotFound(fetchErr) {
+			logDebugf(t, opts.Debug, "Gateway %s/%s not found, still waiting...", gatewayNN.Namespace, gatewayNN.Name)
+			return false, nil // Not found, continue polling
+		}
+		// For any other error, stop polling and return this error
+		t.Logf("Error fetching Gateway %s/%s: %v. Halting polling for this attempt.", gatewayNN.Namespace, gatewayNN.Name, fetchErr)
+		return false, fetchErr
+	})
+
+	// Check if polling timed out or an error occurred during polling
+	if pollErr != nil {
+		var failureMessage string
+		if errors.Is(pollErr, context.DeadlineExceeded) {
+			failureMessage = fmt.Sprintf("Timed out after %v waiting for Gateway object %s/%s to appear in the API server.",
+				waitForGatewayCreationTimeout, gatewayNN.Namespace, gatewayNN.Name)
+		} else {
+			failureMessage = fmt.Sprintf("Error while waiting for Gateway object %s/%s to appear: %v.",
+				gatewayNN.Namespace, gatewayNN.Name, pollErr)
+		}
+		finalMessage := failureMessage + " The Gateway object should have been created by the base manifest application."
+		require.FailNow(t, finalMessage) // Use FailNow to stop if the Gateway isn't found.
+	}
+
+	logDebugf(t, opts.Debug, "Waiting for shared Gateway %s/%s to be ready", gatewayNN.Namespace, gatewayNN.Name)
+	apikubernetes.GatewayMustHaveCondition(t, k8sClient, opts.TimeoutConfig, gatewayNN, metav1.Condition{
+		Type:   string(gatewayv1.GatewayConditionAccepted),
+		Status: metav1.ConditionTrue,
+	})
+	apikubernetes.GatewayMustHaveCondition(t, k8sClient, opts.TimeoutConfig, gatewayNN, metav1.Condition{
+		Type:   string(gatewayv1.GatewayConditionProgrammed),
+		Status: metav1.ConditionTrue,
+	})
+	_, err := apikubernetes.WaitForGatewayAddress(t, k8sClient, opts.TimeoutConfig, apikubernetes.NewGatewayRef(gatewayNN))
 	require.NoErrorf(t, err, "shared gateway %s/%s did not get an address", gatewayNN.Namespace, gatewayNN.Name)
 	t.Logf("Shared Gateway %s/%s is ready.", gatewayNN.Namespace, gatewayNN.Name)
 }

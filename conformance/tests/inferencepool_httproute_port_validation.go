@@ -22,7 +22,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
-	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	gatewayfeatures "sigs.k8s.io/gateway-api/pkg/features"
 
@@ -54,7 +53,7 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 			hostname := "port-unspecified.example.com"
 			path := "/test-port-unspecified"
 
-			gatewayk8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
+			k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewayNN)
 
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
@@ -81,7 +80,7 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 			hostname := "port-matching.example.com"
 			path := "/test-port-matching"
 
-			gatewayk8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
+			k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewayNN)
 
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
@@ -109,7 +108,7 @@ var InferencePoolHTTPRoutePortValidation = suite.ConformanceTest{
 			hostname := "port-non-matching.example.com"
 			path := "/test-port-non-matching"
 
-			gatewayk8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
+			k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, routeNN, gatewayNN)
 			k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewayNN)
 
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(

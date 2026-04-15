@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapiconfig "sigs.k8s.io/gateway-api/conformance/utils/config"
 	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 
@@ -223,17 +224,48 @@ func InferencePoolMustHaveNoParents(t *testing.T, c client.Reader, poolNN types.
 	t.Logf("Successfully verified that InferencePool %s has no parent statuses.", poolNN.String())
 }
 
+// HTTPRouteMustBeAcceptedAndResolved waits for the specified HTTPRoute
+// to be Accepted and have its references resolved by the specified Gateway.
+// It uses the upstream Gateway API's HTTPRouteMustHaveCondition helper.
+func HTTPRouteMustBeAcceptedAndResolved(t *testing.T, c client.Client, timeoutConfig gatewayapiconfig.TimeoutConfig, routeNN, gatewayNN types.NamespacedName) {
+	t.Helper()
+
+	acceptedCondition := metav1.Condition{
+		Type:   string(gatewayv1.RouteConditionAccepted),
+		Status: metav1.ConditionTrue,
+		Reason: string(gatewayv1.RouteReasonAccepted),
+	}
+
+	resolvedRefsCondition := metav1.Condition{
+		Type:   string(gatewayv1.RouteConditionResolvedRefs),
+		Status: metav1.ConditionTrue,
+		Reason: string(gatewayv1.RouteReasonResolvedRefs),
+	}
+
+	t.Logf("Waiting for HTTPRoute %s to be Accepted by Gateway %s", routeNN.String(), gatewayNN.String())
+	gatewayk8sutils.HTTPRouteMustHaveCondition(t, c, timeoutConfig, routeNN, gatewayNN, acceptedCondition)
+
+	t.Logf("Waiting for HTTPRoute %s to have ResolvedRefs by Gateway %s", routeNN.String(), gatewayNN.String())
+	gatewayk8sutils.HTTPRouteMustHaveCondition(t, c, timeoutConfig, routeNN, gatewayNN, resolvedRefsCondition)
+
+	t.Logf("HTTPRoute %s is now Accepted and has ResolvedRefs by Gateway %s", routeNN.String(), gatewayNN.String())
+}
+
 // InferencePoolMustBeAcceptedByParent waits for the specified InferencePool
 // to report an Accepted condition with status True and reason "Accepted"
 // from the input Gateway.
 func InferencePoolMustBeAcceptedByParent(t *testing.T, c client.Reader, poolNN, gatewayNN types.NamespacedName) {
 	t.Helper()
 
-	acceptedByParentCondition := gatewayk8sutils.GetAcceptedByParentGatewayCondition()
+	acceptedByParentCondition := metav1.Condition{
+		Type:   string(gatewayv1.GatewayConditionAccepted),
+		Status: metav1.ConditionTrue,
+		Reason: string(gatewayv1.GatewayReasonAccepted), // Expecting the standard "Accepted" reason
+	}
 
-	t.Logf("Waiting for InferencePool %s to be Accepted by a parent Gateway (Reason: %s)", poolNN.String(), &acceptedByParentCondition.Reason)
+	t.Logf("Waiting for InferencePool %s to be Accepted by a parent Gateway (Reason: %s)", poolNN.String(), gatewayv1.GatewayReasonAccepted)
 	InferencePoolMustHaveCondition(t, c, poolNN, gatewayNN, acceptedByParentCondition)
-	t.Logf("InferencePool %s is Accepted by a parent Gateway (Reason: %s)", poolNN.String(), acceptedByParentCondition.Reason)
+	t.Logf("InferencePool %s is Accepted by a parent Gateway (Reason: %s)", poolNN.String(), gatewayv1.GatewayReasonAccepted)
 }
 
 // HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted waits for the specified HTTPRoute
@@ -249,7 +281,7 @@ func HTTPRouteAndInferencePoolMustBeAcceptedAndRouteAccepted(
 	t.Helper()
 	var timeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
 
-	gatewayk8sutils.HTTPRouteMustBeAcceptedAndResolved(t, c, timeoutConfig.TimeoutConfig, routeNN, gatewayNN)
+	HTTPRouteMustBeAcceptedAndResolved(t, c, timeoutConfig.TimeoutConfig, routeNN, gatewayNN)
 	InferencePoolMustBeAcceptedByParent(t, c, poolNN, gatewayNN)
 	t.Logf("Successfully verified: HTTPRoute %s (Gateway %s) is Accepted & Resolved, and InferencePool %s is RouteAccepted.",
 		routeNN.String(), gatewayNN.String(), poolNN.String())

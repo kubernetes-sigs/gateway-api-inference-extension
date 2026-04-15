@@ -19,7 +19,8 @@ package tests
 import (
 	"testing"
 
-	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	gatewayfeatures "sigs.k8s.io/gateway-api/pkg/features"
 
@@ -46,7 +47,11 @@ var InferencePoolAccepted = suite.ConformanceTest{
 		gatewayNN := resources.PrimaryGatewayNN
 
 		t.Run("InferencePool should have Accepted condition set to True", func(t *testing.T) {
-			acceptedCondition := gatewayk8sutils.GetGatewayAcceptedCondition()
+			acceptedCondition := metav1.Condition{
+				Type:   string(gatewayv1.GatewayConditionAccepted),
+				Status: metav1.ConditionTrue,
+				Reason: "", // "" means we don't strictly check the Reason for this basic test.
+			}
 			k8sutils.InferencePoolMustHaveCondition(t, s.Client, poolNN, gatewayNN, acceptedCondition)
 		})
 	},

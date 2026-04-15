@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
-	gatewayk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	"sigs.k8s.io/gateway-api/conformance/utils/suite"
 	gatewayfeatures "sigs.k8s.io/gateway-api/pkg/features"
 
@@ -58,7 +57,7 @@ var GatewayDestinationEndpointServed = suite.ConformanceTest{
 		backendPodLabels := map[string]string{"app": resources.PrimaryModelServerAppLabel}
 
 		t.Log("Verifying HTTPRoute and InferencePool are accepted and the Gateway has an address.")
-		gatewayk8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteNN, gatewayNN)
+		k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, httpRouteNN, gatewayNN)
 		k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, poolNN, gatewayNN)
 		gwAddr := k8sutils.GetGatewayEndpoint(t, s.Client, s.TimeoutConfig, gatewayNN)
 

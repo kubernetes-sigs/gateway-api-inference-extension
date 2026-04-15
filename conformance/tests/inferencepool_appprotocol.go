@@ -30,7 +30,6 @@ import (
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
 	requestcontroltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/test"
 	schedulingtest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test"
-	gwk8sutils "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 )
 
 func init() {
@@ -100,7 +99,7 @@ var InferencePoolAppProtocol = suite.ConformanceTest{
 			tc := tc
 			t.Run(tc.name, func(t *testing.T) {
 				t.Log("Verifying HTTPRoute and InferencePool are accepted.")
-				gwk8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, tc.routeNN, gatewayNN)
+				k8sutils.HTTPRouteMustBeAcceptedAndResolved(t, s.Client, s.TimeoutConfig, tc.routeNN, gatewayNN)
 				k8sutils.InferencePoolMustBeAcceptedByParent(t, s.Client, tc.poolNN, gatewayNN)
 
 				pods, err := k8sutils.GetPodsWithLabel(t, s.Client, resources.AppBackendNamespace, tc.labels, s.TimeoutConfig)
