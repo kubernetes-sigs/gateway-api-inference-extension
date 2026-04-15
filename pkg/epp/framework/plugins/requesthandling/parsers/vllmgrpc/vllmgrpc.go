@@ -216,8 +216,12 @@ func convertTokenizedPrompt(tokenized *pb.TokenizedInput, mmInputs *pb.Multimoda
 		return nil
 	}
 
+	inputIDs := tokenized.GetInputIds()
+	copiedTokenIDs := make([]uint32, len(inputIDs))
+	copy(copiedTokenIDs, inputIDs)
+
 	return &fwkrh.TokenizedPrompt{
-		TokenIDs:           append([]uint32(nil), tokenized.GetInputIds()...),
+		TokenIDs:           copiedTokenIDs,
 		MultiModalFeatures: convertMultiModalFeatures(mmInputs),
 	}
 }
