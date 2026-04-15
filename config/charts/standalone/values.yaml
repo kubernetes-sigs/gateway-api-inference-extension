@@ -3,7 +3,7 @@ inferenceExtension:
   image:
     registry: registry.k8s.io
     repository: gateway-api-inference-extension/epp
-    tag: v1.5.0-rc.1
+    tag: v1.5.0-rc.2
     pullPolicy: Always
   extProcPort: 9002
   extraServicePorts:
