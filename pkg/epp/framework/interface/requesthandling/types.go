@@ -97,7 +97,7 @@ type TokenizedPrompt struct {
 	MultiModalFeatures []MultiModalFeature
 }
 
-// MultiModalFeature holds all data needed for precise prefix-cache scoring of a single
+// MultiModalFeature holds all data needed for prefix-cache scoring of a single
 // multimodal item. Items are ordered by token position within the prompt.
 // Currently only ModalityImage is supported.
 type MultiModalFeature struct {
