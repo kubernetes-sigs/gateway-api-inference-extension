@@ -38,6 +38,17 @@ bbr:
 provider:
   name: none
 
+  # ext_proc events configuration.
+  # Controls which HTTP lifecycle events are sent to BBR for processing.
+  # Enable only the events that plugins actually need to process.
+  supportedEvents:
+    requestHeaders: true
+    requestBody: true
+    requestTrailers: true
+    responseHeaders: true
+    responseBody: true
+    responseTrailers: true
+
   # Istio-specific configuration.
   # This block is only used if name is "istio".
   istio:
