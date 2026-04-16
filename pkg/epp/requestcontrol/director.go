@@ -205,9 +205,8 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 }
 
 func (d *Director) modelRewriteIfNeeded(reqCtx *handlers.RequestContext, inferenceRequestBody *fwkrh.InferenceRequestBody) error {
-	switch v := inferenceRequestBody.Payload.(type) {
-	case fwkrh.PayloadMap:
-		// Mutate the model name inside the map, this is currently only supported if the payload is a map.
+	if v, ok := inferenceRequestBody.Payload.(fwkrh.PayloadMap); ok {
+		// Mutate the model name inside the map, this is currently only supported if the payload is a PayloadMap.
 		_, err := d.mutateModel(reqCtx, v)
 		if err != nil {
 			return err
