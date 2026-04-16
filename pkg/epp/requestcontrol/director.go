@@ -202,6 +202,9 @@ func (d *Director) HandleRequest(ctx context.Context, reqCtx *handlers.RequestCo
 	if err != nil {
 		return reqCtx, err
 	}
+	if err := d.repackage(ctx, reqCtx, llmRequestBody); err != nil {
+		return reqCtx, err
+	}
 
 	return reqCtx, nil
 }
@@ -214,38 +217,24 @@ func (d *Director) processRequestBody(ctx context.Context, reqCtx *handlers.Requ
 
 	switch v := llmRequestBody.Payload.(type) {
 	case fwksched.PayloadProto:
-		// Protos are not currently mutated, return as-is.
-		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
+		// Protos are not currently mutated.
 	case fwksched.PayloadMap:
-		if err := d.mutateAndRepackage(ctx, reqCtx, v); err != nil {
+		if err := d.modelRewriteIfNeeded(reqCtx, v); err != nil {
 			return nil, err
 		}
 	case fwksched.RawPayload:
-		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
+		// Raw payloads are not currently mutated.
 	default:
 		return nil, errcommon.Error{Code: errcommon.BadRequest, Msg: "Unsupported llmRequest parsedBody"}
 	}
 	return llmRequestBody, nil
 }
 
-func (d *Director) mutateAndRepackage(ctx context.Context, reqCtx *handlers.RequestContext, bodyMap map[string]any) error {
-	logger := log.FromContext(ctx)
-
-	// Mutate the model name inside the map
+func (d *Director) modelRewriteIfNeeded(reqCtx *handlers.RequestContext, bodyMap map[string]any) error {
 	_, err := d.mutateModel(reqCtx, bodyMap)
 	if err != nil {
 		return err
 	}
-
-	// Marshal back to bytes so downstream ExtProc filters see the updated model
-	requestBodyBytes, err := json.Marshal(bodyMap)
-	if err != nil {
-		logger.Error(err, "Error marshalling request body")
-		return errcommon.Error{Code: errcommon.Internal, Msg: "Error marshalling request body"}
-	}
-
-	reqCtx.Request.RawBody = requestBodyBytes
-	reqCtx.RequestSize = len(requestBodyBytes)
 
 	return nil
 }
@@ -263,6 +252,25 @@ func (d *Director) mutateModel(reqCtx *handlers.RequestContext, bodyMap map[stri
 	d.applyWeightedModelRewrite(reqCtx)
 	bodyMap["model"] = reqCtx.TargetModelName
 	return reqCtx, nil
+}
+
+func (d *Director) repackage(ctx context.Context, reqCtx *handlers.RequestContext, llmRequestBody *fwksched.LLMRequestBody) error {
+	logger := log.FromContext(ctx)
+	switch v := llmRequestBody.Payload.(type) {
+	case fwksched.PayloadMap:
+		requestBodyBytes, err := json.Marshal(v)
+		if err != nil {
+			logger.Error(err, "Error marshalling request body")
+			return errcommon.Error{Code: errcommon.Internal, Msg: "Error marshalling request body"}
+		}
+		reqCtx.Request.RawBody = requestBodyBytes
+		reqCtx.RequestSize = len(requestBodyBytes)
+	case fwksched.PayloadProto, fwksched.RawPayload:
+		reqCtx.RequestSize = len(reqCtx.Request.RawBody)
+	default:
+		return errcommon.Error{Code: errcommon.BadRequest, Msg: "Unsupported llmRequest parsedBody"}
+	}
+	return nil
 }
 
 func (d *Director) applyWeightedModelRewrite(reqCtx *handlers.RequestContext) {

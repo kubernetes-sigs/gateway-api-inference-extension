@@ -158,6 +158,21 @@ func (m *mockAdmissionPlugin) AdmitRequest(ctx context.Context, request *fwksche
 	return m.denialError
 }
 
+type mockPreRequestPlugin struct {
+	name     string
+	modifyFn func(request *fwksched.LLMRequest)
+}
+
+func (m *mockPreRequestPlugin) TypedName() fwkplugin.TypedName {
+	return fwkplugin.TypedName{Name: m.name, Type: "mock"}
+}
+
+func (m *mockPreRequestPlugin) PreRequest(ctx context.Context, request *fwksched.LLMRequest, schedulingResult *fwksched.SchedulingResult) {
+	if m.modifyFn != nil {
+		m.modifyFn(request)
+	}
+}
+
 type mockProducedDataType struct {
 	value int
 }
@@ -304,10 +319,11 @@ func TestDirector_HandleRequest(t *testing.T) {
 		parser                  fwkrh.Parser
 		wantErrCode             string                   // Expected errcommon code string
 		wantReqCtx              *handlers.RequestContext // Fields to check in the returned RequestContext
-		wantMutatedBodyModel    string                   // Expected model in reqCtx.Request.Body after PostDispatch
 		targetModelName         string                   // Expected model name after target model resolution
 		admitRequestDenialError error                    // Expected denial error from admission plugin
 		prepareDataPlugin       *mockPrepareDataPlugin
+		preRequestPlugin        *mockPreRequestPlugin
+		wantMutatedBody         map[string]any
 	}{
 		{
 			name: "successful completions request",
@@ -331,9 +347,50 @@ func TestDirector_HandleRequest(t *testing.T) {
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel:   model,
+			wantMutatedBody: map[string]any{
+				"model":  model,
+				"prompt": "critical prompt",
+			},
 			inferenceObjectiveName: objectiveName,
-		}, {
+		},
+		{
+			name: "successful request with preRequest plugin adding key",
+			reqBodyMap: map[string]any{
+				"model":  model,
+				"prompt": "original prompt",
+			},
+			mockAdmissionController: &mockAdmissionController{admitErr: nil},
+			schedulerMockSetup: func(m *mockScheduler) {
+				m.scheduleResults = defaultSuccessfulScheduleResults
+			},
+			initialTargetModelName: model,
+			wantReqCtx: &handlers.RequestContext{
+				ObjectiveKey:    objectiveName,
+				TargetModelName: model,
+				TargetPod: &fwkdl.EndpointMetadata{
+					NamespacedName: types.NamespacedName{Namespace: "default", Name: "pod1"},
+					Address:        "192.168.1.100",
+					Port:           "8000",
+					MetricsHost:    "192.168.1.100:8000",
+				},
+				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
+			},
+			wantMutatedBody: map[string]any{
+				"model":   model,
+				"prompt":  "original prompt",
+				"new_key": "new_value",
+			},
+			inferenceObjectiveName: objectiveName,
+			preRequestPlugin: &mockPreRequestPlugin{
+				name: "test-pre-request-plugin",
+				modifyFn: func(request *fwksched.LLMRequest) {
+					if payloadMap, ok := request.Body.Payload.(fwksched.PayloadMap); ok {
+						payloadMap["new_key"] = "new_value"
+					}
+				},
+			},
+		},
+		{
 			name: "successful request with model rewrite",
 			reqBodyMap: map[string]any{
 				"model":  modelToBeRewritten,
@@ -355,9 +412,13 @@ func TestDirector_HandleRequest(t *testing.T) {
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel:   modelRewritten,
+			wantMutatedBody: map[string]any{
+				"model":  modelRewritten,
+				"prompt": "some prompt",
+			},
 			inferenceObjectiveName: model,
-		}, {
+		},
+		{
 			name: "successful chat completions request",
 			reqBodyMap: map[string]any{
 				"model": model,
@@ -383,8 +444,16 @@ func TestDirector_HandleRequest(t *testing.T) {
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel: model,
-			targetModelName:      model,
+			wantMutatedBody: map[string]any{
+				"model": model,
+				"messages": []any{
+					map[string]any{
+						"role":    "user",
+						"content": "critical prompt",
+					},
+				},
+			},
+			targetModelName: model,
 		},
 		{
 			name: "successful chat completions request with prepare data plugins",
@@ -412,9 +481,17 @@ func TestDirector_HandleRequest(t *testing.T) {
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel: model,
-			targetModelName:      model,
-			prepareDataPlugin:    newMockPrepareDataPlugin("test-plugin"),
+			wantMutatedBody: map[string]any{
+				"model": model,
+				"messages": []any{
+					map[string]any{
+						"role":    "user",
+						"content": "critical prompt",
+					},
+				},
+			},
+			targetModelName:   model,
+			prepareDataPlugin: newMockPrepareDataPlugin("test-plugin"),
 		},
 		{
 			name: "successful chat completions request with admit request plugins",
@@ -441,7 +518,15 @@ func TestDirector_HandleRequest(t *testing.T) {
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel:    model,
+			wantMutatedBody: map[string]any{
+				"model": model,
+				"messages": []any{
+					map[string]any{
+						"role":    "user",
+						"content": "critical prompt",
+					},
+				},
+			},
 			targetModelName:         model,
 			admitRequestDenialError: nil,
 		},
@@ -460,7 +545,15 @@ func TestDirector_HandleRequest(t *testing.T) {
 			schedulerMockSetup: func(m *mockScheduler) {
 				m.scheduleResults = defaultSuccessfulScheduleResults
 			},
-			wantMutatedBodyModel:    model,
+			wantMutatedBody: map[string]any{
+				"model": model,
+				"messages": []any{
+					map[string]any{
+						"role":    "user",
+						"content": "critical prompt",
+					},
+				},
+			},
 			targetModelName:         model,
 			admitRequestDenialError: errors.New("denied by admit plugin"),
 			wantErrCode:             errcommon.Internal,
@@ -519,7 +612,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel:   "resolved-target-model-A",
+			wantMutatedBody: map[string]any{
+				"model":  "resolved-target-model-A",
+				"prompt": "prompt for target resolution",
+			},
 			inferenceObjectiveName: objectiveNameResolve,
 		},
 		{
@@ -539,7 +635,10 @@ func TestDirector_HandleRequest(t *testing.T) {
 				},
 				TargetEndpoint: "192.168.1.100:8000,192.168.2.100:8000,192.168.4.100:8000",
 			},
-			wantMutatedBodyModel: "food-review-1",
+			wantMutatedBody: map[string]any{
+				"model":  "food-review-1",
+				"prompt": "test prompt",
+			},
 			reqBodyMap: map[string]any{
 				"model":  "food-review-1",
 				"prompt": "test prompt",
@@ -653,6 +752,9 @@ func TestDirector_HandleRequest(t *testing.T) {
 				if test.prepareDataPlugin != nil {
 					config = config.WithPrepareDataPlugins(test.prepareDataPlugin)
 				}
+				if test.preRequestPlugin != nil {
+					config = config.WithPreRequestPlugins(test.preRequestPlugin)
+				}
 				config = config.WithAdmissionPlugins(newMockAdmissionPlugin("test-admit-plugin", test.admitRequestDenialError))
 
 				endpointCandidates := NewCachedEndpointCandidates(context.Background(), NewDatastoreEndpointCandidates(ds), time.Minute)
@@ -711,14 +813,15 @@ func TestDirector_HandleRequest(t *testing.T) {
 					assert.Equal(t, test.wantReqCtx.TargetEndpoint, returnedReqCtx.TargetEndpoint, "reqCtx.TargetEndpoint mismatch")
 				}
 
-				if test.wantMutatedBodyModel != "" {
+				if test.wantMutatedBody != nil {
 					assert.NotEmpty(t, returnedReqCtx.Request.RawBody, "Expected mutated body, but reqCtx.Request.Body is nil")
 					updatedBodyMap := make(map[string]any)
 					if err := json.Unmarshal(reqCtx.Request.RawBody, &updatedBodyMap); err != nil {
 						t.Errorf("Error to Unmarshal reqCtx.Request.UpdatedBody, err is %v", err)
 					}
-					assert.Equal(t, test.wantMutatedBodyModel, updatedBodyMap["model"],
-						"Mutated reqCtx.Request.Body model mismatch")
+					if diff := cmp.Diff(test.wantMutatedBody, updatedBodyMap); diff != "" {
+						t.Errorf("reqCtx.Request.RawBody mismatch (-want +got):\n%s", diff)
+					}
 				}
 				assert.Equal(t, len(reqCtx.Request.RawBody), reqCtx.RequestSize)
 			})
