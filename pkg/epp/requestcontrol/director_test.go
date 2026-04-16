@@ -451,7 +451,7 @@ func TestDirector_HandleRequest(t *testing.T) {
 					},
 				},
 			},
-			targetModelName:      model,
+			targetModelName: model,
 		},
 		{
 			name: "successful chat completions request with prepare data plugins",
@@ -488,8 +488,8 @@ func TestDirector_HandleRequest(t *testing.T) {
 					},
 				},
 			},
-			targetModelName:      model,
-			prepareDataPlugin:    newMockPrepareDataPlugin("test-plugin"),
+			targetModelName:   model,
+			prepareDataPlugin: newMockPrepareDataPlugin("test-plugin"),
 		},
 		{
 			name: "successful chat completions request with admit request plugins",
