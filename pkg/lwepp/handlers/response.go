@@ -23,31 +23,70 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/metadata"
 )
 
-func (s *StreamingServer) handleResponseHeaders(ctx context.Context, reqCtx *RequestContext, req *extProcPb.ProcessingRequest_ResponseHeaders) (*extProcPb.ProcessingResponse, error) {
+func (s *StreamingServer) handleResponseHeaders(ctx context.Context, fullReq *extProcPb.ProcessingRequest, respHeaders *extProcPb.ProcessingRequest_ResponseHeaders) *extProcPb.ProcessingResponse {
 	logger := log.FromContext(ctx)
 	logger.Info("Handling response headers")
+
+	// Read the endpoint that actually served the request from Envoy's response metadata.
+	// GKE Gateway sets envoy.lb.x-gateway-destination-endpoint-served after routing to the backend.
+	var servedEndpoint string
+	respMetadata := envoy.ExtractMetadataValues(fullReq)
+	logger.Info("Extracted metadata in response headers", "metadata", respMetadata)
+	lbMetadata, ok := respMetadata[metadata.DestinationEndpointNamespace].(map[string]any)
+	if !ok {
+		servedEndpoint = "fail: missing envoy lb metadata"
+	} else if served, ok := lbMetadata[metadata.DestinationEndpointServedKey].(string); !ok {
+		servedEndpoint = "fail: missing destination endpoint served metadata"
+	} else {
+		servedEndpoint = served
+	}
+
+	logger.Info("Setting conformance test result header", "header", metadata.ConformanceTestResultHeader, "value", servedEndpoint)
+
+	headers := []*configPb.HeaderValueOption{
+		{
+			Header: &configPb.HeaderValue{
+				Key:      metadata.ConformanceTestResultHeader,
+				RawValue: []byte(servedEndpoint),
+			},
+		},
+		{
+			Header: &configPb.HeaderValue{
+				// This is for debugging purpose only.
+				Key:      "x-went-into-resp-headers",
+				RawValue: []byte("true"),
+			},
+		},
+	}
+
+	// Include any non-system-owned headers from the original response.
+	if respHeaders != nil && respHeaders.ResponseHeaders != nil && respHeaders.ResponseHeaders.Headers != nil {
+		for _, header := range respHeaders.ResponseHeaders.Headers.Headers {
+			key := header.Key
+			headers = append(headers, &configPb.HeaderValueOption{
+				Header: &configPb.HeaderValue{
+					Key:      key,
+					RawValue: []byte(envoy.GetHeaderValue(header)),
+				},
+			})
+		}
+	}
 
 	resp := &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_ResponseHeaders{
 			ResponseHeaders: &extProcPb.HeadersResponse{
 				Response: &extProcPb.CommonResponse{
 					HeaderMutation: &extProcPb.HeaderMutation{
-						SetHeaders: []*configPb.HeaderValueOption{
-							{
-								Header: &configPb.HeaderValue{
-									Key:      metadata.ConformanceTestResultHeader,
-									RawValue: []byte(reqCtx.TargetEndpoint),
-								},
-							},
-						},
+						SetHeaders: headers,
 					},
 				},
 			},
 		},
 	}
 
-	return resp, nil
+	return resp
 }

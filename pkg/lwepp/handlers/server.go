@@ -17,13 +17,17 @@ limitations under the License.
 package handlers
 
 import (
+	"context"
 	"io"
+	"net"
+	"sync/atomic"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/datastore"
@@ -36,19 +40,18 @@ type Datastore interface {
 	PodList(predicate func(*datastore.Endpoint) bool) []*datastore.Endpoint
 }
 
-  func NewStreamingServer(datastore Datastore, disableEndpointSubsetFilter bool) *StreamingServer {
-      return &StreamingServer{
-          datastore:                   datastore,
-          disableEndpointSubsetFilter: disableEndpointSubsetFilter,
-      }
-  }
+func NewStreamingServer(datastore Datastore) *StreamingServer {
+	return &StreamingServer{
+		datastore: datastore,
+		picker:    &RoundRobinPicker{},
+	}
+}
 
-// Server implements the Envoy external processing server.
-  type StreamingServer struct {
-      datastore                   Datastore
-      rrIndex                     uint64
-      disableEndpointSubsetFilter bool
-  }
+// StreamingServer implements the Envoy external processing server.
+type StreamingServer struct {
+	datastore Datastore
+	picker    EndpointPicker
+}
 
 // RequestContext stores context information during the life time of an HTTP request.
 type RequestContext struct {
@@ -56,9 +59,49 @@ type RequestContext struct {
 	SelectedPodIP  string
 }
 
+// PickRequest contains metadata from the incoming request to guide endpoint selection.
+type PickRequest struct {
+	Headers map[string]string
+	Body    []byte
+	Model   string
+}
+
+// PickResult holds the selected backend endpoint information.
+type PickResult struct {
+	Endpoint     string            // Primary endpoint (ip:port)
+	Fallbacks    []string          // Optional fallback endpoints
+	MutatedBody  []byte            // If non-nil, replaces the request body forwarded to Envoy
+	ExtraHeaders map[string]string // Additional headers to set on the request
+}
+
+// EndpointPicker defines a strategy for selecting backend inference endpoints.
+type EndpointPicker interface {
+	Pick(ctx context.Context, req *PickRequest, endpoints []*datastore.Endpoint) (*PickResult, error)
+}
+
+// RoundRobinPicker implements a basic round-robin endpoint selection strategy.
+type RoundRobinPicker struct {
+	rrIndex uint64
+}
+
+// Pick selects an endpoint based on round-robin ordering.
+func (p *RoundRobinPicker) Pick(ctx context.Context, req *PickRequest, endpoints []*datastore.Endpoint) (*PickResult, error) {
+	if len(endpoints) == 0 {
+		return nil, status.Errorf(codes.Unavailable, "no endpoints available")
+	}
+
+	index := atomic.AddUint64(&p.rrIndex, 1)
+	selectedPod := endpoints[index%uint64(len(endpoints))]
+
+	return &PickResult{
+		Endpoint: net.JoinHostPort(selectedPod.Address, selectedPod.Port),
+	}, nil
+}
+
 func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	ctx := srv.Context()
-	logger := log.FromContext(ctx)
+	logger := ctrl.Log.WithName("ext-proc")
+	ctx = log.IntoContext(ctx, logger)
 	logger.Info("Processing new stream")
 
 	reqCtx := &RequestContext{}
@@ -100,6 +143,12 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 											RawValue: []byte(reqCtx.TargetEndpoint),
 										},
 									},
+									{
+										Header: &configPb.HeaderValue{
+											Key:      "X-Echo-Set-Header",
+											RawValue: []byte(metadata.ConformanceTestResultHeader + ":" + reqCtx.TargetEndpoint),
+										},
+									},
 								},
 							},
 						},
@@ -119,18 +168,42 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
 
+		case *extProcPb.ProcessingRequest_RequestBody:
+			logger.V(1).Info("Received request body", "endOfStream", v.RequestBody.EndOfStream)
+			resp := &extProcPb.ProcessingResponse{
+				Response: &extProcPb.ProcessingResponse_RequestBody{
+					RequestBody: &extProcPb.BodyResponse{
+						Response: &extProcPb.CommonResponse{},
+					},
+				},
+			}
+			if err := srv.Send(resp); err != nil {
+				return status.Errorf(codes.Unknown, "failed to send body response back to Envoy: %v", err)
+			}
+
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			logger.Info("Received response headers")
-			resp, err := s.handleResponseHeaders(ctx, reqCtx, v)
-			if err != nil {
-				return err
-			}
+			resp := s.handleResponseHeaders(ctx, req, v)
 			if err := srv.Send(resp); err != nil {
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
 
+		case *extProcPb.ProcessingRequest_ResponseBody:
+			logger.V(1).Info("Received response body", "endOfStream", v.ResponseBody.EndOfStream)
+			resp := &extProcPb.ProcessingResponse{
+				Response: &extProcPb.ProcessingResponse_ResponseBody{
+					ResponseBody: &extProcPb.BodyResponse{
+						Response: &extProcPb.CommonResponse{},
+					},
+				},
+			}
+
+			if err := srv.Send(resp); err != nil {
+				return status.Errorf(codes.Unknown, "failed to send response body back to Envoy: %v", err)
+			}
+
 		default:
-			// Ignore other request types (Body, Trailers)
+			// Ignore other request types (Trailers)
 			logger.V(1).Info("Ignoring request type", "type", v)
 		}
 	}

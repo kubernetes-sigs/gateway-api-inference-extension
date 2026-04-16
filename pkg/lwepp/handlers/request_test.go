@@ -53,7 +53,7 @@ func TestHandleRequestHeaders_RoundRobin(t *testing.T) {
 		{Address: "10.0.0.2", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := &StreamingServer{datastore: ds}
+	server := NewStreamingServer(ds)
 
 	req := &extProcPb.ProcessingRequest_RequestHeaders{
 		RequestHeaders: &extProcPb.HttpHeaders{
@@ -81,19 +81,19 @@ func TestHandleRequestHeaders_RoundRobin(t *testing.T) {
 	assert.Equal(t, reqCtx1.SelectedPodIP, reqCtx3.SelectedPodIP)
 }
 
-  func TestHandleRequestHeaders_FilteringViaHeader(t *testing.T) {
-			pods := []*datastore.Endpoint{
+func TestHandleRequestHeaders_FilteringViaHeader(t *testing.T) {
+	pods := []*datastore.Endpoint{
 		{Address: "10.0.0.1", Port: "8080"},
 		{Address: "10.0.0.2", Port: "8080"},
 		{Address: "10.0.0.3", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := &StreamingServer{datastore: ds}
+	server := NewStreamingServer(ds)
 
 	req := &extProcPb.ProcessingRequest_RequestHeaders{
 		RequestHeaders: &extProcPb.HttpHeaders{
-      Headers: &envoyCorev3.HeaderMap{
-          Headers: []*envoyCorev3.HeaderValue{
+			Headers: &envoyCorev3.HeaderMap{
+				Headers: []*envoyCorev3.HeaderValue{
 					{Key: "test-epp-endpoint-selection", Value: "10.0.0.2"},
 				},
 			},
@@ -101,14 +101,14 @@ func TestHandleRequestHeaders_RoundRobin(t *testing.T) {
 	}
 
 	reqCtx := &RequestContext{}
-	 err := server.handleRequestHeaders(context.Background(), reqCtx, nil, req)
+	err := server.handleRequestHeaders(context.Background(), reqCtx, nil, req)
 	assert.NoError(t, err)
 	assert.Equal(t, "10.0.0.2", reqCtx.SelectedPodIP)
 }
 
 func TestHandleRequestHeaders_NoPods(t *testing.T) {
 	ds := &mockDatastore{pods: []*datastore.Endpoint{}}
-	server := &StreamingServer{datastore: ds}
+	server := NewStreamingServer(ds)
 
 	req := &extProcPb.ProcessingRequest_RequestHeaders{
 		RequestHeaders: &extProcPb.HttpHeaders{
@@ -117,82 +117,83 @@ func TestHandleRequestHeaders_NoPods(t *testing.T) {
 	}
 
 	reqCtx := &RequestContext{}
-	 err := server.handleRequestHeaders(context.Background(), reqCtx, nil, req)
+	err := server.handleRequestHeaders(context.Background(), reqCtx, nil, req)
 	assert.Error(t, err)
 }
 
-  func TestHandleRequestHeaders_FilteringViaFilterMetadata(t *testing.T) {
-      pods := []*datastore.Endpoint{
-          {Address: "10.0.0.1", Port: "8080"},
-          {Address: "10.0.0.2", Port: "8080"},
-          {Address: "10.0.0.3", Port: "8080"},
-      }
-      ds := &mockDatastore{pods: pods}
-      server := &StreamingServer{datastore: ds}
+func TestHandleRequestHeaders_FilteringViaFilterMetadata(t *testing.T) {
+	pods := []*datastore.Endpoint{
+		{Address: "10.0.0.1", Port: "8080"},
+		{Address: "10.0.0.2", Port: "8080"},
+		{Address: "10.0.0.3", Port: "8080"},
+	}
+	ds := &mockDatastore{pods: pods}
+	server := NewStreamingServer(ds)
 
-      fullReq := &extProcPb.ProcessingRequest{
-          MetadataContext: &envoyCorev3.Metadata{
-              FilterMetadata: map[string]*structpb.Struct{
-                  metadata.SubsetFilterNamespace: {
-                      Fields: map[string]*structpb.Value{
-                          metadata.SubsetFilterKey: structpb.NewListValue(&structpb.ListValue{
-                              Values: []*structpb.Value{
-                                  structpb.NewStringValue("10.0.0.3:8080"),
-                              },
-                          }),
-                      },
-                  },
-              },
-          },
-      }
-      req := &extProcPb.ProcessingRequest_RequestHeaders{
-          RequestHeaders: &extProcPb.HttpHeaders{
-              Headers: &envoyCorev3.HeaderMap{},
-          },
-      }
+	fullReq := &extProcPb.ProcessingRequest{
+		MetadataContext: &envoyCorev3.Metadata{
+			FilterMetadata: map[string]*structpb.Struct{
+				metadata.SubsetFilterNamespace: {
+					Fields: map[string]*structpb.Value{
+						metadata.SubsetFilterKey: structpb.NewListValue(&structpb.ListValue{
+							Values: []*structpb.Value{
+								structpb.NewStringValue("10.0.0.3:8080"),
+							},
+						}),
+					},
+				},
+			},
+		},
+	}
+	req := &extProcPb.ProcessingRequest_RequestHeaders{
+		RequestHeaders: &extProcPb.HttpHeaders{
+			Headers: &envoyCorev3.HeaderMap{},
+		},
+	}
 
-      reqCtx := &RequestContext{}
-      err := server.handleRequestHeaders(context.Background(), reqCtx, fullReq, req)
-      assert.NoError(t, err)
-      assert.Equal(t, "10.0.0.3", reqCtx.SelectedPodIP)
-  }
+	reqCtx := &RequestContext{}
+	err := server.handleRequestHeaders(context.Background(), reqCtx, fullReq, req)
+	assert.NoError(t, err)
+	assert.Equal(t, "10.0.0.3", reqCtx.SelectedPodIP)
+}
 
-	  func TestHandleRequestHeaders_FilterMetadataTakesPrecedenceOverHeader(t *testing.T) {
-      pods := []*datastore.Endpoint{
-          {Address: "10.0.0.2", Port: "8080"},
-          {Address: "10.0.0.3", Port: "8080"},
-      }
-      ds := &mockDatastore{pods: pods}
-      server := &StreamingServer{datastore: ds}
+func TestHandleRequestHeaders_HeaderTakesPrecedenceOverMetadata(t *testing.T) {
+	pods := []*datastore.Endpoint{
+		{Address: "10.0.0.2", Port: "8080"},
+		{Address: "10.0.0.3", Port: "8080"},
+	}
+	ds := &mockDatastore{pods: pods}
+	server := NewStreamingServer(ds)
 
-      fullReq := &extProcPb.ProcessingRequest{
-          MetadataContext: &envoyCorev3.Metadata{
-              FilterMetadata: map[string]*structpb.Struct{
-                  metadata.SubsetFilterNamespace: {
-                      Fields: map[string]*structpb.Value{
-                          metadata.SubsetFilterKey: structpb.NewListValue(&structpb.ListValue{
-                              Values: []*structpb.Value{
-                                  structpb.NewStringValue("10.0.0.3:8080"),
-                              },
-                          }),
-                      },
-                  },
-              },
-          },
-      }
-      req := &extProcPb.ProcessingRequest_RequestHeaders{
-          RequestHeaders: &extProcPb.HttpHeaders{
-              Headers: &envoyCorev3.HeaderMap{
-                  Headers: []*envoyCorev3.HeaderValue{
-                      {Key: "test-epp-endpoint-selection", Value: "10.0.0.1"},
-                  },
-              },
-          },
-      }
+	fullReq := &extProcPb.ProcessingRequest{
+		MetadataContext: &envoyCorev3.Metadata{
+			FilterMetadata: map[string]*structpb.Struct{
+				metadata.SubsetFilterNamespace: {
+					Fields: map[string]*structpb.Value{
+						metadata.SubsetFilterKey: structpb.NewListValue(&structpb.ListValue{
+							Values: []*structpb.Value{
+								structpb.NewStringValue("10.0.0.2:8080"),
+								structpb.NewStringValue("10.0.0.3:8080"),
+							},
+						}),
+					},
+				},
+			},
+		},
+	}
+	req := &extProcPb.ProcessingRequest_RequestHeaders{
+		RequestHeaders: &extProcPb.HttpHeaders{
+			Headers: &envoyCorev3.HeaderMap{
+				Headers: []*envoyCorev3.HeaderValue{
+					{Key: "test-epp-endpoint-selection", Value: "10.0.0.2"},
+				},
+			},
+		},
+	}
 
-      reqCtx := &RequestContext{}
-      err := server.handleRequestHeaders(context.Background(), reqCtx, fullReq, req)
-      assert.NoError(t, err)
-      // Filter metadata should win over the test header.
-      assert.Equal(t, "10.0.0.3", reqCtx.SelectedPodIP)
-  }
+	reqCtx := &RequestContext{}
+	err := server.handleRequestHeaders(context.Background(), reqCtx, fullReq, req)
+	assert.NoError(t, err)
+	// The test header should override metadata-based filtering.
+	assert.Equal(t, "10.0.0.2", reqCtx.SelectedPodIP)
+}

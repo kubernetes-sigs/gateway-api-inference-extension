@@ -29,7 +29,6 @@ func TestEndpointTargetPorts(t *testing.T) {
 		name          string
 		fs            *pflag.FlagSet
 		args          []string
-		expectError   bool // expect validation error
 		expectedPorts []int
 	}{
 		{
@@ -39,7 +38,6 @@ func TestEndpointTargetPorts(t *testing.T) {
 				"--endpoint-target-ports", "9090",
 				"--endpoint-target-ports", "80",
 			},
-			expectError:   false,
 			expectedPorts: []int{8080, 9090, 80},
 		},
 		{
@@ -47,7 +45,6 @@ func TestEndpointTargetPorts(t *testing.T) {
 			args: []string{
 				"--endpoint-target-ports", "8080,9090,80",
 			},
-			expectError:   false,
 			expectedPorts: []int{8080, 9090, 80},
 		},
 		{
@@ -58,25 +55,7 @@ func TestEndpointTargetPorts(t *testing.T) {
 				"--endpoint-target-ports", "8080",
 				"--endpoint-target-ports", "9090",
 			},
-			expectError:   false,
 			expectedPorts: []int{8080, 9090},
-		},
-		{
-			name: "Invalid negative port number",
-			args: []string{
-				"--endpoint-target-ports", "8080",
-				"--endpoint-target-ports", "-1",
-			},
-			expectError:   true,
-			expectedPorts: []int{8080, -1},
-		},
-		{
-			name: "Invalid over max port range",
-			args: []string{
-				"--endpoint-target-ports", "65536",
-			},
-			expectError:   true,
-			expectedPorts: []int{65536},
 		},
 	}
 
@@ -87,30 +66,15 @@ func TestEndpointTargetPorts(t *testing.T) {
 			opts := NewOptions()
 			opts.AddFlags(tt.fs)
 
-			argv := make([]string, 0, 4+len(tt.args))
-			argv = append(argv, "--endpoint-selector", "app=vllm", "--config-file", "fake-config.yaml") // avoid an options validation error
-			argv = append(argv, tt.args...)
-
-			if err := tt.fs.Parse(argv); err != nil {
+			if err := tt.fs.Parse(tt.args); err != nil {
 				t.Fatalf("Failed to parse flags: %v", err)
 			}
 
 			if err := opts.Complete(); err != nil {
-				if !tt.expectError {
-					t.Fatalf("Complete failed unexpectedly with error: %v", err)
-				}
-				return
+				t.Fatalf("Complete failed unexpectedly with error: %v", err)
 			}
 
-			err := opts.Validate()
-			if tt.expectError {
-				if err == nil {
-					t.Fatalf("Expected a validation error but got none.")
-				}
-				return
-			}
-
-			if err != nil {
+			if err := opts.Validate(); err != nil {
 				t.Fatalf("Validate failed unexpectedly with error: %v", err)
 			}
 

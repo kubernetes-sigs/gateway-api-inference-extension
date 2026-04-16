@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -41,9 +42,8 @@ type PodReconciler struct {
 func (c *PodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	if !c.Datastore.PoolHasSynced() {
-		logger.V(logutil.TRACE).Info("Skipping reconciling Pod because the InferencePool is not available yet")
-		// When the inferencePool is initialized it lists the appropriate pods and populates the datastore, so no need to requeue.
-		return ctrl.Result{}, nil
+		logger.V(logutil.VERBOSE).Info("InferencePool not yet synced, requeueing pod reconcile")
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	logger.V(logutil.VERBOSE).Info("Pod being reconciled")

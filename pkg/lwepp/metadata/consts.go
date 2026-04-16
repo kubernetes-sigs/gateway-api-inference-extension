@@ -30,4 +30,10 @@ const (
 	DestinationEndpointServedKey = "x-gateway-destination-endpoint-served"
 	// ConformanceTestResultHeader is the header used by the conformance test to specify the endpoint that served the request.
 	ConformanceTestResultHeader = "x-conformance-test-served-endpoint"
+	// FlowFairnessIDKey is the header key used to pass the fairness ID to be used in Flow Control.
+	FlowFairnessIDKey = "x-gateway-inference-fairness-id"
+	// ObjectiveKey is the header key used to specify the objective of an incoming request.
+	ObjectiveKey = "x-gateway-inference-objective"
+	// ModelNameRewriteKey is the header key used to specify the model name to be used when the request is forwarded to the model server.
+	ModelNameRewriteKey = "x-gateway-model-name-rewrite"
 )

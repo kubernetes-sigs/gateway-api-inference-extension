@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"time"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
@@ -41,17 +42,14 @@ import (
 )
 
 // ExtProcServerRunner provides methods to manage an external process server.
-  type ExtProcServerRunner struct {
-      GrpcPort                    int
-      GKNN                        common.GKNN
-      ControllerCfg               ControllerConfig
-      Datastore                   datastore.Datastore
-      SecureServing               bool
-      HealthChecking              bool
-      CertPath                    string
-      EnableCertReload            bool
-      DisableEndpointSubsetFilter bool
-  }
+type ExtProcServerRunner struct {
+	GrpcPort       int
+	GrpcHealthPort int
+	GKNN           common.GKNN
+	Datastore      datastore.Datastore
+	HealthChecking bool
+	SecureServing  bool
+}
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
 // Note: Dependencies like Datastore, Scheduler, SD need to be set separately.
@@ -68,29 +66,21 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 			Kind:  "InferencePool",
 		},
 	}
-  return &ExtProcServerRunner{
-      GrpcPort:                    opts.GRPCPort,
-      GKNN:                        gknn,
-      ControllerCfg:               NewControllerConfig(true),
-      SecureServing:               opts.SecureServing,
-      HealthChecking:              opts.HealthChecking,
-      DisableEndpointSubsetFilter: opts.DisableEndpointSubsetFilter,
-
-      // Dependencies can be assigned later.
-  }
+	return &ExtProcServerRunner{
+		GrpcPort:       opts.GRPCPort,
+		GKNN:           gknn,
+		HealthChecking: opts.HealthChecking,
+		// Datastore can be assigned later.
+	}
 }
 
 // SetupWithManager sets up the runner with the given manager.
 func (r *ExtProcServerRunner) SetupWithManager(mgr ctrl.Manager) error {
-	// Create the controllers and register them with the manager
-	if r.ControllerCfg.startCrdReconcilers {
-		if err := (&controller.InferencePoolReconciler{
-			Datastore: r.Datastore,
-			Reader:    mgr.GetClient(),
-		}).SetupWithManager(mgr); err != nil {
-			return fmt.Errorf("failed setting up InferencePoolReconciler - %w", err)
-		}
-
+	if err := (&controller.InferencePoolReconciler{
+		Datastore: r.Datastore,
+		Reader:    mgr.GetClient(),
+	}).SetupWithManager(mgr); err != nil {
+		return fmt.Errorf("failed setting up InferencePoolReconciler - %w", err)
 	}
 
 	if err := (&controller.PodReconciler{
@@ -108,50 +98,25 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
 		var srv *grpc.Server
 		if r.SecureServing {
-			var cert tls.Certificate
-			var err error
-			if r.CertPath != "" {
-				cert, err = tls.LoadX509KeyPair(r.CertPath+"/tls.crt", r.CertPath+"/tls.key")
-			} else {
-				// Create tls based credential.
-				cert, err = tlsutil.CreateSelfSignedTLSCertificate(logger)
-			}
+			cert, err := tlsutil.CreateSelfSignedTLSCertificate(logger)
 			if err != nil {
-				return fmt.Errorf("failed to create self signed certificate - %w", err)
+				return fmt.Errorf("failed to create self-signed certificate: %w", err)
 			}
-
-			var creds credentials.TransportCredentials
-			if r.CertPath != "" && r.EnableCertReload {
-				reloader, err := common.NewCertReloader(ctx, r.CertPath, &cert)
-				if err != nil {
-					return fmt.Errorf("failed to create cert reloader: %w", err)
-				}
-				creds = credentials.NewTLS(&tls.Config{
-					GetCertificate: func(_ *tls.ClientHelloInfo) (*tls.Certificate, error) {
-						return reloader.Get(), nil
-					},
-					NextProtos: []string{"h2"},
-				})
-			} else {
-				creds = credentials.NewTLS(&tls.Config{
-					Certificates: []tls.Certificate{cert},
-					NextProtos:   []string{"h2"},
-				})
-			}
-			// Init the server.
+			creds := credentials.NewTLS(&tls.Config{
+				Certificates: []tls.Certificate{cert},
+				NextProtos:   []string{"h2"},
+			})
 			srv = grpc.NewServer(grpc.Creds(creds))
 		} else {
 			srv = grpc.NewServer()
 		}
 
-		extProcServer := handlers.NewStreamingServer(r.Datastore, r.DisableEndpointSubsetFilter)
+		extProcServer := handlers.NewStreamingServer(r.Datastore)
 		extProcPb.RegisterExternalProcessorServer(srv, extProcServer)
 
 		if r.HealthChecking {
 			healthcheck := health.NewServer()
-			healthgrpc.RegisterHealthServer(srv,
-				healthcheck,
-			)
+			healthgrpc.RegisterHealthServer(srv, healthcheck)
 			svcName := extProcPb.ExternalProcessor_ServiceDesc.ServiceName
 			logger.Info("Setting ExternalProcessor service status to SERVING", "serviceName", svcName)
 			healthcheck.SetServingStatus(svcName, healthgrpc.HealthCheckResponse_SERVING)
@@ -159,5 +124,34 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 
 		// Forward to the gRPC runnable.
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)
+	}))
+}
+
+// HealthServerRunnable returns a Runnable that starts a dedicated gRPC health server
+// on GrpcHealthPort for liveness and readiness probes.
+func (r *ExtProcServerRunner) HealthServerRunnable(logger logr.Logger) manager.Runnable {
+	return runnable.NoLeaderElection(manager.RunnableFunc(func(ctx context.Context) error {
+		srv := grpc.NewServer()
+		healthcheck := health.NewServer()
+		healthgrpc.RegisterHealthServer(srv, healthcheck)
+		healthcheck.SetServingStatus("inference-extension", healthgrpc.HealthCheckResponse_NOT_SERVING)
+		logger.Info("Starting gRPC health server", "port", r.GrpcHealthPort)
+
+		// Flip to SERVING once the pool has been synced into the datastore.
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(100 * time.Millisecond):
+					if r.Datastore.PoolHasSynced() {
+						healthcheck.SetServingStatus("inference-extension", healthgrpc.HealthCheckResponse_SERVING)
+						return
+					}
+				}
+			}
+		}()
+
+		return runnable.GRPCServer("health", srv, r.GrpcHealthPort).Start(ctx)
 	}))
 }

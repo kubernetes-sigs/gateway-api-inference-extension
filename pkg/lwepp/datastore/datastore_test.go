@@ -36,10 +36,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	backendmetrics "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/backend/metrics"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/datalayer"
-	fwkdl "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/datalayer"
-	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
+	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/util/testing"
 )
 
 func inferencePoolToEndpointPool(inferencePool *v1.InferencePool) *EndpointPool {
@@ -128,41 +125,34 @@ func TestPool(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		period := time.Second
-		factories := []datalayer.EndpointFactory{
-			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewTestRuntime(t, period),
-		}
-		for range factories {
-			t.Run(tt.name, func(t *testing.T) {
-				// Set up the scheme.
-				scheme := runtime.NewScheme()
-				_ = clientgoscheme.AddToScheme(scheme)
-				fakeClient := fake.NewClientBuilder().
-					WithScheme(scheme).
-					Build()
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up the scheme.
+			scheme := runtime.NewScheme()
+			_ = clientgoscheme.AddToScheme(scheme)
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				Build()
 
-				ds := NewDatastore(context.Background())
-				_ = ds.PoolSet(context.Background(), fakeClient, inferencePoolToEndpointPool(tt.inferencePool))
-				gotPool, gotErr := ds.PoolGet()
-				if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
-					t.Errorf("Unexpected error diff (+got/-want): %s", diff)
+			ds := NewDatastore(context.Background())
+			_ = ds.PoolSet(context.Background(), fakeClient, inferencePoolToEndpointPool(tt.inferencePool))
+			gotPool, gotErr := ds.PoolGet()
+			if diff := cmp.Diff(tt.wantErr, gotErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("Unexpected error diff (+got/-want): %s", diff)
+			}
+			if diff := cmp.Diff(inferencePoolToEndpointPool(tt.wantPool), gotPool); diff != "" {
+				t.Errorf("Unexpected pool diff (+got/-want): %s", diff)
+			}
+			gotSynced := ds.PoolHasSynced()
+			if diff := cmp.Diff(tt.wantSynced, gotSynced); diff != "" {
+				t.Errorf("Unexpected synced diff (+got/-want): %s", diff)
+			}
+			if tt.labels != nil {
+				gotLabelsMatch := ds.PoolLabelsMatch(tt.labels)
+				if diff := cmp.Diff(tt.wantLabelsMatch, gotLabelsMatch); diff != "" {
+					t.Errorf("Unexpected labels match diff (+got/-want): %s", diff)
 				}
-				if diff := cmp.Diff(inferencePoolToEndpointPool(tt.wantPool), gotPool); diff != "" {
-					t.Errorf("Unexpected pool diff (+got/-want): %s", diff)
-				}
-				gotSynced := ds.PoolHasSynced()
-				if diff := cmp.Diff(tt.wantSynced, gotSynced); diff != "" {
-					t.Errorf("Unexpected synced diff (+got/-want): %s", diff)
-				}
-				if tt.labels != nil {
-					gotLabelsMatch := ds.PoolLabelsMatch(tt.labels)
-					if diff := cmp.Diff(tt.wantLabelsMatch, gotLabelsMatch); diff != "" {
-						t.Errorf("Unexpected labels match diff (+got/-want): %s", diff)
-					}
-				}
-			})
-		}
+			}
+		})
 	}
 }
 
@@ -234,35 +224,28 @@ func TestPods(t *testing.T) {
 		},
 	}
 	for _, test := range tests {
-		period := time.Second
-		factories := []datalayer.EndpointFactory{
-			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewTestRuntime(t, period),
-		}
-		for range factories {
-			t.Run(test.name, func(t *testing.T) {
-				ctx := context.Background()
-				ds := NewDatastore(t.Context())
-				fakeClient := fake.NewFakeClient()
-				if err := ds.PoolSet(ctx, fakeClient, inferencePoolToEndpointPool(inferencePool)); err != nil {
-					t.Error(err)
-				}
-				for _, pod := range test.existingPods {
-					ds.PodUpdateOrAddIfNotExist(ctx, pod)
-				}
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			ds := NewDatastore(t.Context())
+			fakeClient := fake.NewFakeClient()
+			if err := ds.PoolSet(ctx, fakeClient, inferencePoolToEndpointPool(inferencePool)); err != nil {
+				t.Error(err)
+			}
+			for _, pod := range test.existingPods {
+				ds.PodUpdateOrAddIfNotExist(ctx, pod)
+			}
 
-				test.op(ctx, ds)
-				pods := ds.PodList(AllPodsPredicate)
-				gotPods := make([]*corev1.Pod, 0, len(pods))
-				for _, pm := range pods {
-					pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.PodName, Namespace: pm.NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.Address}}
-					gotPods = append(gotPods, pod)
-				}
-				if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b *corev1.Pod) bool { return a.Name < b.Name })) {
-					t.Errorf("got (%v) != want (%v);", gotPods, test.wantPods)
-				}
-			})
-		}
+			test.op(ctx, ds)
+			pods := ds.PodList(AllPodsPredicate)
+			gotPods := make([]*corev1.Pod, 0, len(pods))
+			for _, pm := range pods {
+				pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: pm.PodName, Namespace: pm.NamespacedName.Namespace}, Status: corev1.PodStatus{PodIP: pm.Address}}
+				gotPods = append(gotPods, pod)
+			}
+			if !cmp.Equal(gotPods, test.wantPods, cmpopts.SortSlices(func(a, b *corev1.Pod) bool { return a.Name < b.Name })) {
+				t.Errorf("got (%v) != want (%v);", gotPods, test.wantPods)
+			}
+		})
 	}
 }
 
@@ -314,83 +297,84 @@ func TestTargetPortsChange(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		period := time.Second
-		factories := []datalayer.EndpointFactory{
-			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewTestRuntime(t, period),
-		}
-		for range factories {
-			t.Run(test.name, func(t *testing.T) {
-				ctx := context.Background()
-				scheme := runtime.NewScheme()
-				_ = clientgoscheme.AddToScheme(scheme)
-				_ = corev1.AddToScheme(scheme)
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			scheme := runtime.NewScheme()
+			_ = clientgoscheme.AddToScheme(scheme)
+			_ = corev1.AddToScheme(scheme)
 
-				// Create fake client with the pod
-				fakeClient := fake.NewClientBuilder().
-					WithScheme(scheme).
-					WithObjects(readyPod1).
-					Build()
+			// Create fake client with the pod
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(readyPod1).
+				Build()
 
-				ds := NewDatastore(ctx)
+			ds := NewDatastore(ctx)
 
-				// Set initial pool with multiple target ports
-				initialPool := testutil.MakeInferencePool("test-pool").
-					Namespace("default").
-					Selector(map[string]string{"app": "vllm"}).ObjRef()
-				initialPool.Spec.TargetPorts = test.initialTargetPorts
+			// Set initial pool with multiple target ports
+			initialPool := testutil.MakeInferencePool("test-pool").
+				Namespace("default").
+				Selector(map[string]string{"app": "vllm"}).ObjRef()
+			initialPool.Spec.TargetPorts = test.initialTargetPorts
 
-				if err := ds.PoolSet(ctx, fakeClient, inferencePoolToEndpointPool(initialPool)); err != nil {
-					t.Fatalf("Failed to set initial pool: %v", err)
-				}
+			if err := ds.PoolSet(ctx, fakeClient, inferencePoolToEndpointPool(initialPool)); err != nil {
+				t.Fatalf("Failed to set initial pool: %v", err)
+			}
 
-				// Verify initial endpoint count
-				initialEndpoints := ds.PodList(AllPodsPredicate)
-				if len(initialEndpoints) != len(test.initialTargetPorts) {
-					t.Errorf("Initial endpoint count: got %d, want %d", len(initialEndpoints), len(test.initialTargetPorts))
-				}
+			// Verify initial endpoint count
+			initialEndpoints := ds.PodList(AllPodsPredicate)
+			if len(initialEndpoints) != len(test.initialTargetPorts) {
+				t.Errorf("Initial endpoint count: got %d, want %d", len(initialEndpoints), len(test.initialTargetPorts))
+			}
 
-				// Update pool with different target ports
-				updatedPool := testutil.MakeInferencePool("test-pool").
-					Namespace("default").
-					Selector(map[string]string{"app": "vllm"}).ObjRef()
-				updatedPool.Spec.TargetPorts = test.updatedTargetPorts
+			// Update pool with different target ports
+			updatedPool := testutil.MakeInferencePool("test-pool").
+				Namespace("default").
+				Selector(map[string]string{"app": "vllm"}).ObjRef()
+			updatedPool.Spec.TargetPorts = test.updatedTargetPorts
 
-				if err := ds.PoolSet(ctx, fakeClient, inferencePoolToEndpointPool(updatedPool)); err != nil {
-					t.Fatalf("Failed to set updated pool: %v", err)
-				}
+			if err := ds.PoolSet(ctx, fakeClient, inferencePoolToEndpointPool(updatedPool)); err != nil {
+				t.Fatalf("Failed to set updated pool: %v", err)
+			}
 
-				// Verify orphaned ranks are removed
-				finalEndpoints := ds.PodList(AllPodsPredicate)
-				if len(finalEndpoints) != test.wantEndpointCountAfter {
-					t.Errorf("Final endpoint count: got %d, want %d", len(finalEndpoints), test.wantEndpointCountAfter)
-				}
+			// Verify orphaned ranks are removed
+			finalEndpoints := ds.PodList(AllPodsPredicate)
+			if len(finalEndpoints) != test.wantEndpointCountAfter {
+				t.Errorf("Final endpoint count: got %d, want %d", len(finalEndpoints), test.wantEndpointCountAfter)
+			}
 
-				// Verify endpoint names
-				gotNames := make([]string, 0, len(finalEndpoints))
-				for _, ep := range finalEndpoints {
-					gotNames = append(gotNames, ep.NamespacedName.Name)
-				}
-				if diff := cmp.Diff(test.wantEndpointNames, gotNames, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
-					t.Errorf("Endpoint names mismatch (-want +got):\n%s", diff)
-				}
-			})
-		}
+			// Verify endpoint names
+			gotNames := make([]string, 0, len(finalEndpoints))
+			for _, ep := range finalEndpoints {
+				gotNames = append(gotNames, ep.NamespacedName.Name)
+			}
+			if diff := cmp.Diff(test.wantEndpointNames, gotNames, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+				t.Errorf("Endpoint names mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 
 func TestEndpointMetadata(t *testing.T) {
+	type endpointMetadata struct {
+		NamespacedName types.NamespacedName
+		PodName        string
+		Address        string
+		Port           string
+		Labels         map[string]string
+		MetricsHost    string
+	}
 	tests := []struct {
 		name              string
 		op                func(ctx context.Context, ds Datastore)
 		pool              *v1.InferencePool
 		existingPods      []*corev1.Pod
-		wantEndpointMetas []*fwkdl.EndpointMetadata
+		wantEndpointMetas []*endpointMetadata
 	}{
 		{
 			name:         "Add new pod, no existing pods, should add",
 			existingPods: []*corev1.Pod{},
-			wantEndpointMetas: []*fwkdl.EndpointMetadata{
+			wantEndpointMetas: []*endpointMetadata{
 				{
 					NamespacedName: types.NamespacedName{
 						Name:      pod1.Name + "-rank-0",
@@ -412,7 +396,7 @@ func TestEndpointMetadata(t *testing.T) {
 		{
 			name:         "Add new pod, no existing pods, should add, multiple target ports",
 			existingPods: []*corev1.Pod{},
-			wantEndpointMetas: []*fwkdl.EndpointMetadata{
+			wantEndpointMetas: []*endpointMetadata{
 				{
 					NamespacedName: types.NamespacedName{
 						Name:      pod1.Name + "-rank-0",
@@ -446,7 +430,7 @@ func TestEndpointMetadata(t *testing.T) {
 		{
 			name:         "Add new pod, with existing pods, should add, multiple target ports",
 			existingPods: []*corev1.Pod{pod1},
-			wantEndpointMetas: []*fwkdl.EndpointMetadata{
+			wantEndpointMetas: []*endpointMetadata{
 				{
 					NamespacedName: types.NamespacedName{
 						Name:      pod1.Name + "-rank-0",
@@ -504,7 +488,7 @@ func TestEndpointMetadata(t *testing.T) {
 		{
 			name:         "Delete the pod, multiple target ports",
 			existingPods: []*corev1.Pod{pod1, pod2},
-			wantEndpointMetas: []*fwkdl.EndpointMetadata{
+			wantEndpointMetas: []*endpointMetadata{
 				{
 					NamespacedName: types.NamespacedName{
 						Name:      pod1.Name + "-rank-0",
@@ -538,41 +522,34 @@ func TestEndpointMetadata(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		period := time.Second
-		factories := []datalayer.EndpointFactory{
-			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewTestRuntime(t, period),
-		}
-		for range factories {
-			t.Run(test.name, func(t *testing.T) {
-				ctx := context.Background()
-				ds := NewDatastore(t.Context())
-				fakeClient := fake.NewFakeClient()
-				if err := ds.PoolSet(ctx, fakeClient, inferencePoolToEndpointPool(test.pool)); err != nil {
-					t.Error(err)
-				}
-				for _, pod := range test.existingPods {
-					ds.PodUpdateOrAddIfNotExist(ctx, pod)
-				}
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			ds := NewDatastore(t.Context())
+			fakeClient := fake.NewFakeClient()
+			if err := ds.PoolSet(ctx, fakeClient, inferencePoolToEndpointPool(test.pool)); err != nil {
+				t.Error(err)
+			}
+			for _, pod := range test.existingPods {
+				ds.PodUpdateOrAddIfNotExist(ctx, pod)
+			}
 
-				test.op(ctx, ds)
-				pods := ds.PodList(AllPodsPredicate)
-				gotMetadata := make([]*fwkdl.EndpointMetadata, 0, len(pods))
-				for _, pm := range pods {
-					gotMetadata = append(gotMetadata, &fwkdl.EndpointMetadata{
-						NamespacedName: pm.NamespacedName,
-						PodName:        pm.PodName,
-						Address:        pm.Address,
-						Port:           pm.Port,
-						Labels:         pm.Labels,
-						MetricsHost:    net.JoinHostPort(pm.Address, pm.Port),
-					})
-				}
-				if diff := cmp.Diff(test.wantEndpointMetas, gotMetadata, cmpopts.SortSlices(func(a, b *fwkdl.EndpointMetadata) bool { return a.NamespacedName.Name < b.NamespacedName.Name })); diff != "" {
-					t.Errorf("ConvertTo() mismatch (-want +got):\n%s", diff)
-				}
-			})
-		}
+			test.op(ctx, ds)
+			pods := ds.PodList(AllPodsPredicate)
+			gotMetadata := make([]*endpointMetadata, 0, len(pods))
+			for _, pm := range pods {
+				gotMetadata = append(gotMetadata, &endpointMetadata{
+					NamespacedName: pm.NamespacedName,
+					PodName:        pm.PodName,
+					Address:        pm.Address,
+					Port:           pm.Port,
+					Labels:         pm.Labels,
+					MetricsHost:    net.JoinHostPort(pm.Address, pm.Port),
+				})
+			}
+			if diff := cmp.Diff(test.wantEndpointMetas, gotMetadata, cmpopts.SortSlices(func(a, b *endpointMetadata) bool { return a.NamespacedName.Name < b.NamespacedName.Name })); diff != "" {
+				t.Errorf("ConvertTo() mismatch (-want +got):\n%s", diff)
+			}
+		})
 	}
 }
 
@@ -690,56 +667,49 @@ func TestActivePortFiltering(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		period := time.Second
-		factories := []datalayer.EndpointFactory{
-			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewTestRuntime(t, period),
-		}
-		for range factories {
-			t.Run(test.name, func(t *testing.T) {
-				ctx := context.Background()
-				scheme := runtime.NewScheme()
-				_ = clientgoscheme.AddToScheme(scheme)
-				_ = corev1.AddToScheme(scheme)
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			scheme := runtime.NewScheme()
+			_ = clientgoscheme.AddToScheme(scheme)
+			_ = corev1.AddToScheme(scheme)
 
-				// Create fake client
-				fakeClient := fake.NewClientBuilder().
-					WithScheme(scheme).
-					Build()
+			// Create fake client
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				Build()
 
-				ds := NewDatastore(ctx)
+			ds := NewDatastore(ctx)
 
-				// Use the first pool in the test
-				if len(test.pools) > 0 {
-					pool := test.pools[0]
-					if err := ds.PoolSet(ctx, fakeClient, inferencePoolToEndpointPool(&pool)); err != nil {
-						t.Fatalf("Failed to set pool: %v", err)
-					}
+			// Use the first pool in the test
+			if len(test.pools) > 0 {
+				pool := test.pools[0]
+				if err := ds.PoolSet(ctx, fakeClient, inferencePoolToEndpointPool(&pool)); err != nil {
+					t.Fatalf("Failed to set pool: %v", err)
 				}
+			}
 
-				// Add all pods
-				for _, pod := range test.pods {
-					ds.PodUpdateOrAddIfNotExist(ctx, pod)
-				}
+			// Add all pods
+			for _, pod := range test.pods {
+				ds.PodUpdateOrAddIfNotExist(ctx, pod)
+			}
 
-				// Check final endpoint count
-				finalEndpoints := ds.PodList(AllPodsPredicate)
-				if len(finalEndpoints) != test.wantEndpointCount {
-					t.Errorf("Final endpoint count: got %d, want %d", len(finalEndpoints), test.wantEndpointCount)
-				}
+			// Check final endpoint count
+			finalEndpoints := ds.PodList(AllPodsPredicate)
+			if len(finalEndpoints) != test.wantEndpointCount {
+				t.Errorf("Final endpoint count: got %d, want %d", len(finalEndpoints), test.wantEndpointCount)
+			}
 
-				// Check endpoint names if specified
-				if test.wantEndpointNames != nil {
-					gotNames := make([]string, 0, len(finalEndpoints))
-					for _, ep := range finalEndpoints {
-						gotNames = append(gotNames, ep.NamespacedName.Name)
-					}
-					if diff := cmp.Diff(test.wantEndpointNames, gotNames, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
-						t.Errorf("Endpoint names mismatch (-want +got):\n%s", diff)
-					}
+			// Check endpoint names if specified
+			if test.wantEndpointNames != nil {
+				gotNames := make([]string, 0, len(finalEndpoints))
+				for _, ep := range finalEndpoints {
+					gotNames = append(gotNames, ep.NamespacedName.Name)
 				}
-			})
-		}
+				if diff := cmp.Diff(test.wantEndpointNames, gotNames, cmpopts.SortSlices(func(a, b string) bool { return a < b })); diff != "" {
+					t.Errorf("Endpoint names mismatch (-want +got):\n%s", diff)
+				}
+			}
+		})
 	}
 }
 
@@ -843,56 +813,49 @@ func TestActivePortEndpointRemoval(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		period := time.Second
-		factories := []datalayer.EndpointFactory{
-			backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-			datalayer.NewTestRuntime(t, period),
-		}
-		for range factories {
-			t.Run(test.name, func(t *testing.T) {
-				ctx := context.Background()
-				scheme := runtime.NewScheme()
-				_ = clientgoscheme.AddToScheme(scheme)
-				_ = corev1.AddToScheme(scheme)
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			scheme := runtime.NewScheme()
+			_ = clientgoscheme.AddToScheme(scheme)
+			_ = corev1.AddToScheme(scheme)
 
-				// Create fake client
-				fakeClient := fake.NewClientBuilder().
-					WithScheme(scheme).
-					Build()
+			// Create fake client
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				Build()
 
-				ds := NewDatastore(ctx)
+			ds := NewDatastore(ctx)
 
-				// Set up the pool
-				if err := ds.PoolSet(ctx, fakeClient, inferencePoolToEndpointPool(test.pool)); err != nil {
-					t.Fatalf("Failed to set pool: %v", err)
-				}
+			// Set up the pool
+			if err := ds.PoolSet(ctx, fakeClient, inferencePoolToEndpointPool(test.pool)); err != nil {
+				t.Fatalf("Failed to set pool: %v", err)
+			}
 
-				// Add the initial pod
-				ds.PodUpdateOrAddIfNotExist(ctx, test.initialPod)
+			// Add the initial pod
+			ds.PodUpdateOrAddIfNotExist(ctx, test.initialPod)
 
-				// Wait a bit for the datastore to process the pod
-				time.Sleep(100 * time.Millisecond)
+			// Wait a bit for the datastore to process the pod
+			time.Sleep(100 * time.Millisecond)
 
-				// Check initial endpoint count (should be 3 since all 3 ports are active)
-				initialEndpoints := ds.PodList(AllPodsPredicate)
-				expectedInitialCount := len(test.pool.Spec.TargetPorts) // Expected based on target ports in pool
-				if len(initialEndpoints) != expectedInitialCount {
-					t.Logf("Initial endpoint count: got %d, want %d", len(initialEndpoints), expectedInitialCount)
-					// Don't fail here, just log - we'll continue to test the reduction
-				}
+			// Check initial endpoint count (should be 3 since all 3 ports are active)
+			initialEndpoints := ds.PodList(AllPodsPredicate)
+			expectedInitialCount := len(test.pool.Spec.TargetPorts) // Expected based on target ports in pool
+			if len(initialEndpoints) != expectedInitialCount {
+				t.Logf("Initial endpoint count: got %d, want %d", len(initialEndpoints), expectedInitialCount)
+				// Don't fail here, just log - we'll continue to test the reduction
+			}
 
-				// Execute operations that change active ports
-				for _, op := range test.operations {
-					op(ds)
-				}
+			// Execute operations that change active ports
+			for _, op := range test.operations {
+				op(ds)
+			}
 
-				// Check final endpoint count
-				finalEndpoints := ds.PodList(AllPodsPredicate)
-				if len(finalEndpoints) != test.wantEndpointCount {
-					t.Errorf("Final endpoint count: got %d, want %d", len(finalEndpoints), test.wantEndpointCount)
-				}
-			})
-		}
+			// Check final endpoint count
+			finalEndpoints := ds.PodList(AllPodsPredicate)
+			if len(finalEndpoints) != test.wantEndpointCount {
+				t.Errorf("Final endpoint count: got %d, want %d", len(finalEndpoints), test.wantEndpointCount)
+			}
+		})
 	}
 }
 
@@ -902,67 +865,59 @@ func TestActivePortEndpointRemoval(t *testing.T) {
 // replaces ds.pool under the write lock.
 // Run with: go test -race -run TestPodUpdateOrAddIfNotExist_ConcurrentPoolSet
 func TestPodUpdateOrAddIfNotExist_ConcurrentPoolSet(t *testing.T) {
-	period := time.Second
-	factories := map[string]datalayer.EndpointFactory{
-		"Legacy PodMetricsFactory": backendmetrics.NewPodMetricsFactory(&backendmetrics.FakePodMetricsClient{}, period),
-		"Datalayer Runtime":        datalayer.NewTestRuntime(t, period),
-	}
+	t.Run("ConcurrentPoolSet", func(t *testing.T) {
+		scheme := runtime.NewScheme()
+		_ = clientgoscheme.AddToScheme(scheme)
+		fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-	for name := range factories {
-		t.Run(name, func(t *testing.T) {
-			scheme := runtime.NewScheme()
-			_ = clientgoscheme.AddToScheme(scheme)
-			fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+		ctx := context.Background()
+		ds := NewDatastore(ctx)
 
-			ctx := context.Background()
-			ds := NewDatastore(ctx)
+		pool := inferencePoolToEndpointPool(
+			testutil.MakeInferencePool("pool1").
+				Namespace("default").
+				Selector(map[string]string{"app": "vllm"}).
+				TargetPorts(8000).ObjRef(),
+		)
+		_ = ds.PoolSet(ctx, fakeClient, pool)
 
-			pool := inferencePoolToEndpointPool(
-				testutil.MakeInferencePool("pool1").
-					Namespace("default").
-					Selector(map[string]string{"app": "vllm"}).
-					TargetPorts(8000).ObjRef(),
-			)
-			_ = ds.PoolSet(ctx, fakeClient, pool)
-
-			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "pod1",
-					Namespace: "default",
-					Labels:    map[string]string{"app": "vllm"},
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pod1",
+				Namespace: "default",
+				Labels:    map[string]string{"app": "vllm"},
+			},
+			Status: corev1.PodStatus{
+				PodIP: "10.0.0.1",
+				Conditions: []corev1.PodCondition{
+					{Type: corev1.PodReady, Status: corev1.ConditionTrue},
 				},
-				Status: corev1.PodStatus{
-					PodIP: "10.0.0.1",
-					Conditions: []corev1.PodCondition{
-						{Type: corev1.PodReady, Status: corev1.ConditionTrue},
-					},
-				},
+			},
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		// Goroutine 1: repeatedly call PoolSet (including nil to simulate reset).
+		go func() {
+			defer wg.Done()
+			for range 500 {
+				_ = ds.PoolSet(ctx, fakeClient, pool)
+				_ = ds.PoolSet(ctx, fakeClient, nil)
+				_ = ds.PoolSet(ctx, fakeClient, pool)
 			}
+		}()
 
-			var wg sync.WaitGroup
-			wg.Add(2)
+		// Goroutine 2: repeatedly call PodUpdateOrAddIfNotExist.
+		go func() {
+			defer wg.Done()
+			for range 1000 {
+				ds.PodUpdateOrAddIfNotExist(ctx, pod)
+			}
+		}()
 
-			// Goroutine 1: repeatedly call PoolSet (including nil to simulate reset).
-			go func() {
-				defer wg.Done()
-				for range 500 {
-					_ = ds.PoolSet(ctx, fakeClient, pool)
-					_ = ds.PoolSet(ctx, fakeClient, nil)
-					_ = ds.PoolSet(ctx, fakeClient, pool)
-				}
-			}()
-
-			// Goroutine 2: repeatedly call PodUpdateOrAddIfNotExist.
-			go func() {
-				defer wg.Done()
-				for range 1000 {
-					ds.PodUpdateOrAddIfNotExist(ctx, pod)
-				}
-			}()
-
-			wg.Wait()
-		})
-	}
+		wg.Wait()
+	})
 }
 
 func TestExtractActivePorts(t *testing.T) {

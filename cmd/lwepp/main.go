@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
@@ -33,12 +34,16 @@ import (
 )
 
 func main() {
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
-	setupLog := ctrl.Log.WithName("setup")
+	zapOpts := zap.Options{Development: true}
+	zapOpts.BindFlags(flag.CommandLine)
+	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 
 	opts := server.NewOptions()
 	opts.AddFlags(pflag.CommandLine)
 	pflag.Parse()
+
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zapOpts)))
+	setupLog := ctrl.Log.WithName("setup")
 
 	if err := opts.Complete(); err != nil {
 		setupLog.Error(err, "Failed to complete options")
@@ -71,21 +76,19 @@ func main() {
 		BindAddress: fmt.Sprintf(":%d", opts.MetricsPort),
 	}
 
-	mgr, err := server.NewDefaultManager(server.NewControllerConfig(true), gknn, cfg, metricsServerOptions, opts.EnableLeaderElection)
+	mgr, err := server.NewDefaultManager(server.NewControllerConfig(true), gknn, cfg, metricsServerOptions)
 	if err != nil {
 		setupLog.Error(err, "Failed to create controller manager")
 		os.Exit(1)
 	}
 
 	runner := &server.ExtProcServerRunner{
-		GrpcPort:         opts.GRPCPort,
-		GKNN:             gknn,
-		Datastore:        ds,
-		ControllerCfg:    server.NewControllerConfig(true),
-		SecureServing:    opts.SecureServing,
-		HealthChecking:   opts.HealthChecking,
-		CertPath:         opts.CertPath,
-		EnableCertReload: opts.EnableCertReload,
+		GrpcPort:       opts.GRPCPort,
+		GrpcHealthPort: opts.GRPCHealthPort,
+		GKNN:           gknn,
+		Datastore:      ds,
+		HealthChecking: opts.HealthChecking,
+		SecureServing:  opts.SecureServing,
 	}
 
 	if err := runner.SetupWithManager(mgr); err != nil {
@@ -97,6 +100,13 @@ func main() {
 		setupLog.Error(err, "Failed to add runner to manager")
 		os.Exit(1)
 	}
+
+	// Start health server directly so it is available immediately, before cache sync.
+	go func() {
+		if err := runner.HealthServerRunnable(setupLog).Start(ctx); err != nil {
+			setupLog.Error(err, "Health server exited")
+		}
+	}()
 
 	setupLog.Info("Starting manager")
 	if err := mgr.Start(ctx); err != nil {

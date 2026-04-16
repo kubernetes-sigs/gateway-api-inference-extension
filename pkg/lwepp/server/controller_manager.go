@@ -69,16 +69,8 @@ func defaultManagerOptions(cfg ControllerConfig, gknn common.GKNN, metricsServer
 
 // NewDefaultManager creates a new controller manager with default configuration.
 // Optional override functions can be passed to customize the manager options (e.g., for testing).
-func NewDefaultManager(controllerCfg ControllerConfig, gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options, leaderElectionEnabled bool, overrides ...func(*ctrl.Options)) (ctrl.Manager, error) {
+func NewDefaultManager(controllerCfg ControllerConfig, gknn common.GKNN, restConfig *rest.Config, metricsServerOptions metricsserver.Options, overrides ...func(*ctrl.Options)) (ctrl.Manager, error) {
 	opt := defaultManagerOptions(controllerCfg, gknn, metricsServerOptions)
-	if leaderElectionEnabled {
-		opt.LeaderElection = true
-		opt.LeaderElectionResourceLock = "leases"
-		// The lease name needs to be unique per EPP deployment.
-		opt.LeaderElectionID = fmt.Sprintf("epp-%s-%s.gateway-api-inference-extension.sigs.k8s.io", gknn.Namespace, gknn.Name)
-		opt.LeaderElectionNamespace = gknn.Namespace
-		opt.LeaderElectionReleaseOnCancel = true
-	}
 
 	for _, override := range overrides {
 		override(&opt)

@@ -32,9 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	utiltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/util/testing"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/util/pool"
+	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/util/testing"
 )
 
 var (
@@ -66,7 +66,7 @@ func TestPodReconciler(t *testing.T) {
 					},
 				},
 			},
-			incomingPod: utiltest.FromBase(basePod3).
+			incomingPod: testutil.FromBase(basePod3).
 				Labels(map[string]string{"some-key": "some-val"}).
 				ReadyCondition().ObjRef(),
 			wantPods: []*corev1.Pod{basePod1, basePod2, basePod3},
@@ -84,7 +84,7 @@ func TestPodReconciler(t *testing.T) {
 					},
 				},
 			},
-			incomingPod: utiltest.FromBase(basePod11).
+			incomingPod: testutil.FromBase(basePod11).
 				Labels(map[string]string{"some-key": "some-val"}).
 				ReadyCondition().ObjRef(),
 			wantPods: []*corev1.Pod{basePod11, basePod2},
@@ -102,7 +102,7 @@ func TestPodReconciler(t *testing.T) {
 					},
 				},
 			},
-			incomingPod: utiltest.FromBase(basePod1).
+			incomingPod: testutil.FromBase(basePod1).
 				Labels(map[string]string{"some-key": "some-val"}).
 				DeletionTimestamp().
 				ReadyCondition().ObjRef(),
@@ -137,7 +137,7 @@ func TestPodReconciler(t *testing.T) {
 					},
 				},
 			},
-			incomingPod: utiltest.FromBase(basePod3).
+			incomingPod: testutil.FromBase(basePod3).
 				Labels(map[string]string{"some-key": "some-val"}).ObjRef(),
 			wantPods: []*corev1.Pod{basePod1, basePod2},
 		},
@@ -154,7 +154,7 @@ func TestPodReconciler(t *testing.T) {
 					},
 				},
 			},
-			incomingPod: utiltest.FromBase(basePod1).
+			incomingPod: testutil.FromBase(basePod1).
 				Labels(map[string]string{"some-wrong-key": "some-val"}).
 				ReadyCondition().ObjRef(),
 			wantPods: []*corev1.Pod{basePod2},
@@ -172,7 +172,7 @@ func TestPodReconciler(t *testing.T) {
 					},
 				},
 			},
-			incomingPod: utiltest.FromBase(basePod1).
+			incomingPod: testutil.FromBase(basePod1).
 				Labels(map[string]string{"some-wrong-key": "some-val"}).
 				ReadyCondition().ObjRef(),
 			wantPods: []*corev1.Pod{basePod2},
