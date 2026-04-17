@@ -1201,25 +1201,13 @@ func TestDirector_HandleResponseReceived(t *testing.T) {
 
 	director.HandleResponseHeader(ctx, reqCtx)
 
-	// HandleResponseHeader runs plugins asynchronously, so wait for completion.
-	require.Eventually(t, func() bool {
-		pr1.mu.Lock()
-		defer pr1.mu.Unlock()
-		return pr1.lastRespOnResponse != nil
-	}, time.Second, 10*time.Millisecond, "response header plugin should have been called")
-
-	pr1.mu.Lock()
-	lastResp := pr1.lastRespOnResponse
-	lastTargetPod := pr1.lastTargetPodOnResponse
-	pr1.mu.Unlock()
-
-	if diff := cmp.Diff("test-req-id-for-response", lastResp.RequestId); diff != "" {
+	if diff := cmp.Diff("test-req-id-for-response", pr1.lastRespOnResponse.RequestId); diff != "" {
 		t.Errorf("Scheduler.OnResponse RequestId mismatch (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff(reqCtx.Response.Headers, lastResp.Headers); diff != "" {
+	if diff := cmp.Diff(reqCtx.Response.Headers, pr1.lastRespOnResponse.Headers); diff != "" {
 		t.Errorf("Scheduler.OnResponse Headers mismatch (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff("namespace1/test-pod-name", lastTargetPod); diff != "" {
+	if diff := cmp.Diff("namespace1/test-pod-name", pr1.lastTargetPodOnResponse); diff != "" {
 		t.Errorf("Scheduler.OnResponse TargetPodName mismatch (-want +got):\n%s", diff)
 	}
 }

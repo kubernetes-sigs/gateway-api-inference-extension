@@ -349,9 +349,10 @@ func (d *Director) toSchedulerEndpoints(endpoints []fwkdl.Endpoint) []fwksched.E
 }
 
 // HandleResponseHeader is called when the response headers are received.
-// Response header plugins are run asynchronously since they do not produce data
-// that is needed by the caller before the next processing step.
 func (d *Director) HandleResponseHeader(ctx context.Context, reqCtx *handlers.RequestContext) *handlers.RequestContext {
+	if len(d.requestControlPlugins.responseReceivedPlugins) == 0 {
+		return reqCtx
+	}
 	response := &fwk.Response{
 		RequestId:   reqCtx.Request.Headers[reqcommon.RequestIdHeaderKey],
 		Headers:     reqCtx.Response.Headers,
@@ -359,7 +360,7 @@ func (d *Director) HandleResponseHeader(ctx context.Context, reqCtx *handlers.Re
 	}
 	// TODO: to extend fallback functionality, handle cases where target pod is unavailable
 	// https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/1224
-	d.runResponseHeaderPluginsAsync(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
+	d.runResponseHeaderPlugins(ctx, reqCtx.SchedulingRequest, response, reqCtx.TargetPod)
 	return reqCtx
 }
 
@@ -478,14 +479,6 @@ func (d *Director) runResponseHeaderPlugins(ctx context.Context, request *fwksch
 		metrics.RecordPluginProcessingLatency(fwk.ResponseReceivedExtensionPoint, plugin.TypedName().Type, plugin.TypedName().Name, time.Since(before))
 		loggerDebug.Info("Completed running ResponseReceived plugin successfully", "plugin", plugin.TypedName())
 	}
-}
-
-// runResponseHeaderPluginsAsync runs all response header plugins in a goroutine.
-func (d *Director) runResponseHeaderPluginsAsync(ctx context.Context, request *fwksched.InferenceRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
-	if len(d.requestControlPlugins.responseReceivedPlugins) == 0 {
-		return
-	}
-	go d.runResponseHeaderPlugins(ctx, request, response, targetEndpoint)
 }
 
 func (d *Director) runResponseBodyPlugins(ctx context.Context, request *fwksched.InferenceRequest, response *fwk.Response, targetEndpoint *fwkdl.EndpointMetadata) {
