@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: vllm
-          image: "vllm/vllm-openai-cpu:v0.19.0" # formal images can be found in https://hub.docker.com/r/vllm/vllm-openai-cpu/tags
+          image: "vllm/vllm-openai-cpu:v0.18.1" # formal images can be found in https://hub.docker.com/r/vllm/vllm-openai-cpu/tags
           imagePullPolicy: IfNotPresent
           command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
           args:

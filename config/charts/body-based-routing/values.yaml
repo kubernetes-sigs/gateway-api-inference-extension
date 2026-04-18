@@ -4,7 +4,7 @@ bbr:
   image:
     registry: registry.k8s.io
     repository: gateway-api-inference-extension/bbr
-    tag: v1.5.0-rc.2
+    tag: v1.5.0
     pullPolicy: Always
   port: 9004
   healthCheckPort: 9005
