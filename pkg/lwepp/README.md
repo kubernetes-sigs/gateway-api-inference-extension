@@ -22,3 +22,17 @@ Conformance tests need to steer individual requests to a specific backend pod in
 ### Served Endpoint Reporting
 
 After a request is completed, conformance tests verify that the request was actually served by the pod the EPP selected. To support this, the LWEPP reads the `x-gateway-destination-endpoint-served` value from Envoy's response metadata (populated by a conforming gateway after routing to the backend) and writes it to the `x-conformance-test-served-endpoint` response header. The conformance test client reads this header to confirm correct routing.
+
+## Development
+
+### Building and Pushing the Image
+
+You can build and push the LWEPP image using the following commands from **this** directory:
+
+```bash
+# Build only
+make lwepp-image-build
+
+# Build and push
+make lwepp-image-push
+```

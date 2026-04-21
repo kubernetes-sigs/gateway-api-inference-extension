@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"slices"
 	"testing"
 
@@ -121,6 +122,9 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	)
 
 	baseManifestsValue := "resources/base.yaml"
+	if baseFromEnv := os.Getenv("INFERENCE_CONFORMANCE_BASE"); baseFromEnv != "" {
+		baseManifestsValue = baseFromEnv
+	}
 	opts := confsuite.ConformanceOptions{
 		Client:               c,
 		ClientOptions:        clientOptions,
