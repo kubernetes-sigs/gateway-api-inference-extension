@@ -19,6 +19,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -79,6 +80,11 @@ type Options struct {
 	EnableCertReload       bool   // Enables certificate reloading of the certificates specified in --cert-path.
 	SecureServing          bool   // Enables secure serving.
 	MetricsEndpointAuth    bool   // Enables authentication and authorization of the metrics endpoint.
+	//
+	// Pre-bound listeners for tests to avoid TOCTOU port races. If set, the corresponding port field is ignored.
+	//
+	GRPCListener       net.Listener
+	GRPCHealthListener net.Listener
 	//
 	// Configuration.
 	//

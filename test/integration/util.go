@@ -624,6 +624,7 @@ func ExtProcServerClient(
 //
 // Note: There is a theoretical race condition where another process grabs the port between the Close() call and the
 // subsequent usage, but this is generally acceptable in hermetic test environments.
+// Prefer GetFreeListener where possible to avoid this race.
 func GetFreePort() (int, error) {
 	// Force IPv4 to prevent flakes on dual-stack CI environments
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -639,6 +640,23 @@ func GetFreePort() (int, error) {
 		return 0, errors.New("failed to cast listener address to TCPAddr")
 	}
 	return addr.Port, nil
+}
+
+// GetFreeListener returns a net.Listener bound to an available IPv4 TCP port
+// on localhost. Unlike GetFreePort, the listener stays open, eliminating the
+// TOCTOU race where another process can steal the port between close and rebind.
+// The caller is responsible for passing the listener to the server or closing it.
+func GetFreeListener() (net.Listener, int, error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to listen on a free port: %w", err)
+	}
+	addr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		listener.Close()
+		return nil, 0, errors.New("failed to cast listener address to TCPAddr")
+	}
+	return listener, addr.Port, nil
 }
 
 // --- Internal Helpers ---

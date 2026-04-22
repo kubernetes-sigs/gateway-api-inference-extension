@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
@@ -36,6 +37,7 @@ import (
 // ExtProcServerRunner provides methods to manage an external process server.
 type ExtProcServerRunner struct {
 	GrpcPort        int
+	GrpcListener    net.Listener // Pre-bound listener; if set, GrpcPort is ignored.
 	SecureServing   bool
 	Streaming       bool
 	RequestPlugins  []framework.RequestProcessor
@@ -73,6 +75,9 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 		extProcPb.RegisterExternalProcessorServer(srv, handlers.NewServer(r.Streaming, r.RequestPlugins, r.ResponsePlugins))
 
 		// Forward to the gRPC runnable.
+		if r.GrpcListener != nil {
+			return runnable.GRPCServerWithListener("ext-proc", srv, r.GrpcListener).Start(ctx)
+		}
 		return runnable.GRPCServer("ext-proc", srv, r.GrpcPort).Start(ctx)
 	}))
 }

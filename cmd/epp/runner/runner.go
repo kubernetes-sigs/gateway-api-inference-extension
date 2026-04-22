@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
@@ -372,6 +373,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	serverRunner := &runserver.ExtProcServerRunner{
 		GrpcPort:                         opts.GRPCPort,
+		GrpcListener:                     opts.GRPCListener,
 		GKNN:                             *gknn,
 		Datastore:                        ds,
 		ControllerCfg:                    controllerCfg,
@@ -394,7 +396,7 @@ func (r *Runner) setup(ctx context.Context, cfg *rest.Config, opts *runserver.Op
 
 	// --- Add Runnables to Manager ---
 	// Register health server.
-	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), ds, opts.GRPCHealthPort, isLeader, opts.EnableLeaderElection, r.parser); err != nil {
+	if err := registerHealthServer(mgr, ctrl.Log.WithName("health"), ds, opts.GRPCHealthPort, opts.GRPCHealthListener, isLeader, opts.EnableLeaderElection, r.parser); err != nil {
 		return nil, nil, err
 	}
 
@@ -654,7 +656,7 @@ func registerExtProcServer(mgr manager.Manager, runner *runserver.ExtProcServerR
 }
 
 // registerHealthServer adds the Health gRPC server as a Runnable to the given manager.
-func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.Datastore, port int, isLeader *atomic.Bool, leaderElectionEnabled bool, supporter appProtocolSupporter) error {
+func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.Datastore, port int, lis net.Listener, isLeader *atomic.Bool, leaderElectionEnabled bool, supporter appProtocolSupporter) error {
 	srv := grpc.NewServer()
 	healthPb.RegisterHealthServer(srv, &healthServer{
 		logger:                logger,
@@ -663,8 +665,13 @@ func registerHealthServer(mgr manager.Manager, logger logr.Logger, ds datastore.
 		leaderElectionEnabled: leaderElectionEnabled,
 		supporter:             supporter,
 	})
-	if err := mgr.Add(
-		runnable.NoLeaderElection(runnable.GRPCServer("health", srv, port))); err != nil {
+	var r manager.Runnable
+	if lis != nil {
+		r = runnable.NoLeaderElection(runnable.GRPCServerWithListener("health", srv, lis))
+	} else {
+		r = runnable.NoLeaderElection(runnable.GRPCServer("health", srv, port))
+	}
+	if err := mgr.Add(r); err != nil {
 		setupLog.Error(err, "Failed to register health server")
 		return err
 	}

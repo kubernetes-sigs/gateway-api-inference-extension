@@ -26,41 +26,52 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-// GRPCServer converts the given gRPC server into a runnable.
+// GRPCServer converts the given gRPC server into a runnable that listens on the given port.
 // The server name is just being used for logging.
 func GRPCServer(name string, srv *grpc.Server, port int) manager.Runnable {
 	return manager.RunnableFunc(func(ctx context.Context) error {
-		// Use "name" key as that is what manager.Server does as well.
-		log := ctrl.Log.WithValues("name", name)
-		log.Info("gRPC server starting")
-
-		// Start listening.
 		lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 		if err != nil {
 			return fmt.Errorf("gRPC server failed to listen - %w", err)
 		}
-
-		log.Info("gRPC server listening", "port", port)
-
-		// Shutdown on context closed.
-		// Terminate the server on context closed.
-		// Make sure the goroutine does not leak.
-		doneCh := make(chan struct{})
-		defer close(doneCh)
-		go func() {
-			select {
-			case <-ctx.Done():
-				log.Info("gRPC server shutting down")
-				srv.GracefulStop()
-			case <-doneCh:
-			}
-		}()
-
-		// Keep serving until terminated.
-		if err := srv.Serve(lis); err != nil && err != grpc.ErrServerStopped {
-			return fmt.Errorf("gRPC server failed - %w", err)
-		}
-		log.Info("gRPC server terminated")
-		return nil
+		return serveGRPC(ctx, name, srv, lis)
 	})
+}
+
+// GRPCServerWithListener converts the given gRPC server into a runnable using
+// a pre-created listener. This avoids TOCTOU port races in tests where
+// GetFreePort() closes a listener and the subsequent bind can be interleaved
+// by other processes grabbing the same port.
+func GRPCServerWithListener(name string, srv *grpc.Server, lis net.Listener) manager.Runnable {
+	return manager.RunnableFunc(func(ctx context.Context) error {
+		return serveGRPC(ctx, name, srv, lis)
+	})
+}
+
+func serveGRPC(ctx context.Context, name string, srv *grpc.Server, lis net.Listener) error {
+	// Use "name" key as that is what manager.Server does as well.
+	log := ctrl.Log.WithValues("name", name)
+	log.Info("gRPC server starting")
+	log.Info("gRPC server listening", "addr", lis.Addr().String())
+
+	// Shutdown on context closed.
+	// Terminate the server on context closed.
+	// Make sure the goroutine does not leak.
+	doneCh := make(chan struct{})
+	defer close(doneCh)
+	go func() {
+		select {
+		case <-ctx.Done():
+			log.Info("gRPC server shutting down")
+			srv.GracefulStop()
+		case <-doneCh:
+		}
+	}()
+
+	// Keep serving until terminated.
+	if err := srv.Serve(lis); err != nil && err != grpc.ErrServerStopped {
+		return fmt.Errorf("gRPC server failed - %w", err)
+	}
+	log.Info("gRPC server terminated")
+	return nil
 }

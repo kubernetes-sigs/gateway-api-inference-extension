@@ -339,13 +339,15 @@ func defaultEppServerOptions(t *testing.T, namespace, configText string) *eppSer
 	require.NoError(t, err)
 	eppOptions.MetricsPort = metricsPort
 
-	grpcPort, err := integration.GetFreePort()
+	grpcListener, grpcPort, err := integration.GetFreeListener()
 	require.NoError(t, err)
 	eppOptions.GRPCPort = grpcPort
+	eppOptions.GRPCListener = grpcListener
 
-	healthPort, err := integration.GetFreePort()
+	healthListener, healthPort, err := integration.GetFreeListener()
 	require.NoError(t, err)
 	eppOptions.GRPCHealthPort = healthPort
+	eppOptions.GRPCHealthListener = healthListener
 	eppOptions.EndpointTargetPorts = []int{8000}
 	eppOptions.SecureServing = false
 	return eppOptions

@@ -108,12 +108,13 @@ func NewBBRHarnessWithPlugins(
 ) *BBRHarness {
 	t.Helper()
 
-	// 1. Allocate Free Port
-	port, err := integration.GetFreePort()
-	require.NoError(t, err, "failed to acquire free port for BBR server")
+	// 1. Allocate Free Listener (avoids TOCTOU port race)
+	listener, port, err := integration.GetFreeListener()
+	require.NoError(t, err, "failed to acquire free listener for BBR server")
 
 	// 2. Configure BBR Server with plugins
 	runner := runserver.NewDefaultExtProcServerRunner(port, false)
+	runner.GrpcListener = listener
 	runner.SecureServing = false
 	runner.Streaming = streaming
 	runner.RequestPlugins = requestPlugins
