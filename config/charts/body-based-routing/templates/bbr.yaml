@@ -22,8 +22,7 @@ spec:
         - "--streaming"
         # Pass additional flags via the bbr.flags field in values.yaml.
         {{- range $key, $value := .Values.bbr.flags }}
-        - --{{ $key }}
-        - "{{ $value }}"
+        - --{{ $key }}={{ $value }}
         {{- end }}      
         {{- range .Values.bbr.plugins }}
         - --plugin
