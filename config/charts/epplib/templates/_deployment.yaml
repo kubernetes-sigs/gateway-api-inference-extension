@@ -132,8 +132,7 @@ spec:
           {{- end }}
               # Pass additional flags via the inferenceExtension.flags field in values.yaml.
           {{- range $key, $value := .Values.inferenceExtension.flags }}
-              - --{{ $key }}
-              - "{{ $value }}"
+              - --{{ $key }}={{ $value }}
           {{- end }}
           {{- if .Values.inferenceExtension.tracing.enabled }}
               - --tracing=true
