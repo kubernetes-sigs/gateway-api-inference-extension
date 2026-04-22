@@ -33,6 +33,14 @@ steps:
   - name: gcr.io/k8s-staging-test-infra/gcb-docker-gcloud:v20260205-38cfa9523f
     entrypoint: make
     args:
+      - lwepp-image-push
+    env:
+    - GIT_TAG=$_GIT_TAG
+    - EXTRA_TAG=$_PULL_BASE_REF
+    - DOCKER_BUILDX_CMD=/buildx-entrypoint
+  - name: gcr.io/k8s-staging-test-infra/gcb-docker-gcloud:v20260205-38cfa9523f
+    entrypoint: make
+    args:
       - latency-training-image-push
       - latency-prediction-image-push
       - latency-prediction-test-image-push
