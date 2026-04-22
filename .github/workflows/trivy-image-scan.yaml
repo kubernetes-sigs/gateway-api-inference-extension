@@ -1,0 +1,85 @@
+name: Trivy Image Vulnerability Scan
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Dockerfile'
+      - 'go.mod'
+      - 'go.sum'
+      - 'cmd/epp/**'
+      - 'pkg/**'
+      - 'internal/**'
+      - 'api/**'
+      - 'apix/**'
+      - 'version/**'
+      - 'sidecars/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'Dockerfile'
+      - 'go.mod'
+      - 'go.sum'
+      - 'cmd/epp/**'
+      - 'pkg/**'
+      - 'internal/**'
+      - 'api/**'
+      - 'apix/**'
+      - 'version/**'
+      - 'sidecars/**'
+  schedule:
+    # Run weekly on Monday at 00:00 UTC to catch new CVEs
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  trivy-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@0634a2670c59f64b4a01f0f96f84700a4088b9f0 # v2.12.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build EPP image
+        run: |
+          docker build \
+            --build-arg COMMIT_SHA=${{ github.sha }} \
+            --build-arg BUILD_REF=${{ github.ref }} \
+            -t gwie-epp:scan \
+            -f Dockerfile .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947e2f6a1c8dc2b8433 # v0.31.0
+        with:
+          image-ref: 'gwie-epp:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Trivy scanner (table output for PR comment)
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947e2f6a1c8dc2b8433 # v0.31.0
+        with:
+          image-ref: 'gwie-epp:scan'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'
