@@ -93,10 +93,11 @@ done
 declare -A test_cases_standalone
 
 # InferencePool Helm Chart test cases
-test_cases_standalone["basic"]="--set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway --set inferenceExtension.endpointsServer.createInferencePool=false"
+test_cases_standalone["basic"]="--set inferenceExtension.endpointsServer.endpointSelector=app=llm-instance-gateway --set inferenceExtension.endpointsServer.createInferencePool=false"
 test_cases_standalone["gke-provider"]="--set provider.name=gke --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway' --set inferenceExtension.endpointsServer.createInferencePool=false"
 test_cases_standalone["latency-predictor"]="--set inferenceExtension.latencyPredictor.enabled=true --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway' --set inferenceExtension.endpointsServer.createInferencePool=false"
 test_cases_standalone["inferencepool"]="--set inferenceExtension.endpointsServer.createInferencePool=true --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway"
+test_cases_standalone["agentgateway"]="--set inferenceExtension.sidecar.proxyType=agentgateway --set inferenceExtension.sidecar.agentgateway.service.name=llm-instance-gateway --set inferenceExtension.sidecar.agentgateway.service.port=8000 --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway' --set inferenceExtension.endpointsServer.createInferencePool=false"
 
 
 echo "Processing dependencies for standalone chart..."
@@ -127,3 +128,41 @@ for key in "${!test_cases_standalone[@]}"; do
   echo "Test case ${key} passed validation."
 done
 
+echo "Running standalone negative validation tests..."
+invalid_proxy_command="${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/standalone --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway' --set inferenceExtension.endpointsServer.createInferencePool=false --set inferenceExtension.sidecar.proxyType=bogus >/dev/null"
+echo "Executing: ${invalid_proxy_command}"
+if eval "${invalid_proxy_command}"; then
+  echo "Helm template unexpectedly succeeded for invalid proxyType"
+  exit 1
+fi
+
+missing_agentgateway_service_command="${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/standalone --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway' --set inferenceExtension.endpointsServer.createInferencePool=false --set inferenceExtension.sidecar.proxyType=agentgateway >/dev/null"
+echo "Executing: ${missing_agentgateway_service_command}"
+if eval "${missing_agentgateway_service_command}"; then
+  echo "Helm template unexpectedly succeeded for missing agentgateway service.name"
+  exit 1
+fi
+
+unsupported_agentgateway_inferencepool_command="${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/standalone --set inferenceExtension.sidecar.proxyType=agentgateway --set inferenceExtension.sidecar.agentgateway.service.name=llm-instance-gateway --set inferenceExtension.sidecar.agentgateway.service.port=8000 --set inferenceExtension.endpointsServer.createInferencePool=true --set inferencePool.modelServers.matchLabels.app=llm-instance-gateway >/dev/null"
+echo "Executing: ${unsupported_agentgateway_inferencepool_command}"
+if eval "${unsupported_agentgateway_inferencepool_command}"; then
+  echo "Helm template unexpectedly succeeded for unsupported agentgateway createInferencePool=true configuration"
+  exit 1
+fi
+
+unsupported_agentgateway_selector_command="${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/standalone --set inferenceExtension.sidecar.proxyType=agentgateway --set inferenceExtension.sidecar.agentgateway.service.name=llm-instance-gateway --set inferenceExtension.endpointsServer.endpointSelector='app in (llm-instance-gateway)' --set inferenceExtension.endpointsServer.createInferencePool=false >/dev/null"
+echo "Executing: ${unsupported_agentgateway_selector_command}"
+if eval "${unsupported_agentgateway_selector_command}"; then
+  echo "Helm template unexpectedly succeeded for unsupported agentgateway model Service selector"
+  exit 1
+fi
+
+echo "Verifying standalone extra flags render as --flag=value..."
+flag_render_output="${TEMP_DIR}/standalone-flag-render.yaml"
+flag_render_command="${SCRIPT_ROOT}/bin/helm template ${SCRIPT_ROOT}/config/charts/standalone --set inferenceExtension.endpointsServer.endpointSelector='app=llm-instance-gateway' --set inferenceExtension.endpointsServer.createInferencePool=false --set-string inferenceExtension.flags.secure-serving=false > ${flag_render_output}"
+echo "Executing: ${flag_render_command}"
+eval "${flag_render_command}"
+if ! grep -q -- '--secure-serving=false' "${flag_render_output}"; then
+  echo "Helm template did not render extra flags as --flag=value"
+  exit 1
+fi

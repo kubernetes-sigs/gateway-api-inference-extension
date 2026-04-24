@@ -1,0 +1,26 @@
+{{- $sidecar := .Values.inferenceExtension.sidecar | default dict -}}
+{{- $proxyType := default "envoy" ($sidecar.proxyType | default "envoy") | lower -}}
+{{- $agentgateway := index $sidecar "agentgateway" | default dict -}}
+{{- $service := index $agentgateway "service" | default dict -}}
+{{- $serviceCreate := index $service "create" | default true -}}
+{{- $serviceName := index $service "name" | default "" -}}
+{{- if and $sidecar.enabled (eq $proxyType "agentgateway") $serviceCreate (not (empty $serviceName)) -}}
+{{- $serviceNamespace := index $service "namespace" | default .Release.Namespace -}}
+{{- $servicePort := index $service "port" | default 8000 -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $serviceName }}
+  namespace: {{ $serviceNamespace }}
+  labels:
+    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+spec:
+  selector:
+    {{- include "gateway-api-inference-extension.agentgateway.modelServiceSelectorLabels" . | trim | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ $servicePort }}
+      protocol: TCP
+      targetPort: {{ $servicePort }}
+  type: ClusterIP
+{{- end -}}
