@@ -270,6 +270,7 @@ binds:
           inferenceRouting:
             endpointPicker:
               host: {{ printf "127.0.0.1:%v" (.Values.inferenceExtension.extProcPort | default 9002) | quote }}
+            destinationMode: passthrough
 services:
 - name: {{ $serviceName | quote }}
   namespace: {{ $serviceNamespace | quote }}

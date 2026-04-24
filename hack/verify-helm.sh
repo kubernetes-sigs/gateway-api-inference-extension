@@ -209,6 +209,10 @@ if ! grep -q -- '    - port: 9000' "${agentgateway_render_output}"; then
   echo "Agentgateway Helm template did not render the custom listener bind port"
   exit 1
 fi
+if ! grep -q -- 'destinationMode: passthrough' "${agentgateway_render_output}"; then
+  echo "Agentgateway Helm template did not render passthrough destination mode"
+  exit 1
+fi
 
 agentgateway_service_block="${TEMP_DIR}/standalone-agentgateway-service.yaml"
 sed -n '/^# Source: standalone\/templates\/agentgateway-service.yaml/,/^---/p' "${agentgateway_render_output}" > "${agentgateway_service_block}"
