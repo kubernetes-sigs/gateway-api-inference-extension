@@ -106,15 +106,52 @@ comma-separated numeric string.
 
 {{/*
 Return the standalone proxy listener port exposed by the EPP Service.
+The port is selected by the Service port named "http" so selection is
+deterministic even when additional Service ports are configured.
 */}}
 {{- define "gateway-api-inference-extension.standaloneProxyListenerPort" -}}
-{{- $listenerPort := 8081 -}}
 {{- $servicePorts := .Values.inferenceExtension.extraServicePorts | default list -}}
-{{- if gt (len $servicePorts) 0 -}}
-  {{- $servicePort := index $servicePorts 0 -}}
-  {{- $listenerPort = include "gateway-api-inference-extension.normalizedPortList" (dict "path" ".Values.inferenceExtension.extraServicePorts[0].targetPort" "value" ((index $servicePort "targetPort") | default (index $servicePort "port"))) | int -}}
+{{- $found := false -}}
+{{- $listenerPort := "" -}}
+{{- $targetPort := "" -}}
+{{- $hasTargetPort := false -}}
+{{- range $index, $servicePort := $servicePorts -}}
+  {{- if eq (toString (index $servicePort "name")) "http" -}}
+    {{- if $found -}}
+      {{- fail ".Values.inferenceExtension.extraServicePorts must contain exactly one port named \"http\" when proxyType=agentgateway" -}}
+    {{- end -}}
+    {{- $found = true -}}
+    {{- if not (hasKey $servicePort "port") -}}
+      {{- fail (printf ".Values.inferenceExtension.extraServicePorts[%d].port is required for the port named \"http\"" $index) -}}
+    {{- end -}}
+    {{- $listenerPort = index $servicePort "port" -}}
+    {{- if hasKey $servicePort "targetPort" -}}
+      {{- $hasTargetPort = true -}}
+      {{- $targetPort = index $servicePort "targetPort" -}}
+    {{- end -}}
+  {{- end -}}
 {{- end -}}
-{{- $listenerPort -}}
+{{- if not $found -}}
+  {{- fail ".Values.inferenceExtension.extraServicePorts must contain exactly one port named \"http\" when proxyType=agentgateway" -}}
+{{- end -}}
+{{- if kindIs "slice" $listenerPort -}}
+  {{- fail ".Values.inferenceExtension.extraServicePorts[name=http].port must be a single numeric port" -}}
+{{- end -}}
+{{- $listenerPortString := trim (toString $listenerPort) -}}
+{{- if not (regexMatch "^[0-9]+$" $listenerPortString) -}}
+  {{- fail (printf ".Values.inferenceExtension.extraServicePorts[name=http].port must be numeric, got %q" $listenerPortString) -}}
+{{- end -}}
+{{- $listenerPortNumber := int $listenerPortString -}}
+{{- if or (lt $listenerPortNumber 1) (gt $listenerPortNumber 65535) -}}
+  {{- fail (printf ".Values.inferenceExtension.extraServicePorts[name=http].port must be between 1 and 65535, got %d" $listenerPortNumber) -}}
+{{- end -}}
+{{- if $hasTargetPort -}}
+  {{- $targetPortString := trim (toString $targetPort) -}}
+  {{- if and (ne $targetPortString $listenerPortString) (ne $targetPortString "http") -}}
+    {{- fail (printf ".Values.inferenceExtension.extraServicePorts[name=http].targetPort must be omitted, %q, or \"http\" when proxyType=agentgateway, got %q" $listenerPortString $targetPortString) -}}
+  {{- end -}}
+{{- end -}}
+{{- $listenerPortString -}}
 {{- end -}}
 
 {{/*
@@ -149,7 +186,7 @@ Standalone uses proxy presets merged with explicit sidecar overrides.
   {{- if eq $proxyType "agentgateway" -}}
     {{- $listenerPort := include "gateway-api-inference-extension.standaloneProxyListenerPort" . | int -}}
     {{- $ports := index $resolved "ports" | default list -}}
-    {{- $resolvedPorts := list (dict "containerPort" $listenerPort "name" (printf "http-%d" $listenerPort)) -}}
+    {{- $resolvedPorts := list (dict "containerPort" $listenerPort "name" "http") -}}
     {{- range $index, $port := $ports -}}
       {{- if gt $index 0 -}}
         {{- $resolvedPorts = append $resolvedPorts $port -}}

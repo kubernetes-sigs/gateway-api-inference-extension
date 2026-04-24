@@ -115,7 +115,9 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
       `inferenceExtension.sidecar.agentgateway.service.*`. The generated `Service` selector is derived from
       `inferenceExtension.endpointsServer.endpointSelector`, which must use comma-separated `key=value`
       labels. `inferenceExtension.sidecar.agentgateway.service.ports` must match
-      `inferenceExtension.endpointsServer.targetPorts`. `InferencePool` is not supported in this mode.
+      `inferenceExtension.endpointsServer.targetPorts`. Agentgateway listens on the
+      `inferenceExtension.extraServicePorts` entry named `http` and uses that entry's `port` value.
+      `InferencePool` is not supported in this mode.
 
       **Note:** The chart defaults to `cr.agentgateway.dev/agentgateway:latest-dev` on `main` for this preset.
       Release tooling rewrites this to a stable Agentgateway tag when cutting a release.

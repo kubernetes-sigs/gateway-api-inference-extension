@@ -310,7 +310,7 @@ inferenceExtension:
           - "/config/config.yaml"
         ports:
           - containerPort: 8081
-            name: http-8081
+            name: http
           - containerPort: 15020
             name: metrics-15020
           - containerPort: 15021
