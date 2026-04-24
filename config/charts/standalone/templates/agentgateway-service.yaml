@@ -13,7 +13,11 @@ metadata:
   name: {{ $serviceName | quote }}
   namespace: {{ $serviceNamespace | quote }}
   labels:
-    {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agentgateway-model-service
+    app.kubernetes.io/part-of: {{ include "gateway-api-inference-extension.name" . | quote }}
+    {{- if .Chart.AppVersion }}
+    app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+    {{- end }}
 spec:
   selector:
     {{- include "gateway-api-inference-extension.agentgateway.modelServiceSelectorLabels" . | trim | nindent 4 }}

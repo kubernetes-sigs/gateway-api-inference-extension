@@ -198,3 +198,14 @@ if ! grep -q -- '    - port: 9000' "${agentgateway_render_output}"; then
   echo "Agentgateway Helm template did not render the custom listener bind port"
   exit 1
 fi
+
+agentgateway_service_block="${TEMP_DIR}/standalone-agentgateway-service.yaml"
+sed -n '/^# Source: standalone\/templates\/agentgateway-service.yaml/,/^---/p' "${agentgateway_render_output}" > "${agentgateway_service_block}"
+if ! grep -q -- 'app.kubernetes.io/component: agentgateway-model-service' "${agentgateway_service_block}"; then
+  echo "Agentgateway model Service did not render its component label"
+  exit 1
+fi
+if grep -q -- 'app.kubernetes.io/name:' "${agentgateway_service_block}"; then
+  echo "Agentgateway model Service rendered an app.kubernetes.io/name label"
+  exit 1
+fi
