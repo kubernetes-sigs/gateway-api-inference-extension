@@ -114,7 +114,8 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
       The standalone chart generates the model `Service` and the minimal agentgateway local config from
       `inferenceExtension.sidecar.agentgateway.service.*`. The generated `Service` selector is derived from
       `inferenceExtension.endpointsServer.endpointSelector`, which must use comma-separated `key=value`
-      labels. `InferencePool` is not supported in this mode.
+      labels. `inferenceExtension.sidecar.agentgateway.service.ports` must match
+      `inferenceExtension.endpointsServer.targetPorts`. `InferencePool` is not supported in this mode.
 
       **Note:** The chart defaults to `cr.agentgateway.dev/agentgateway:latest-dev` on `main` for this preset.
       Release tooling rewrites this to a stable Agentgateway tag when cutting a release.
@@ -128,9 +129,11 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
       --dependency-update \
       --set inferenceExtension.sidecar.proxyType=agentgateway \
       --set inferenceExtension.sidecar.agentgateway.service.name=vllm-qwen3-32b \
-      --set inferenceExtension.sidecar.agentgateway.service.port=8000 \
+      --set 'inferenceExtension.sidecar.agentgateway.service.ports[0]=8000' \
       --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-qwen3-32b" \
       --set inferenceExtension.endpointsServer.createInferencePool=false \
+      --set 'inferenceExtension.endpointsServer.targetPorts[0]=8000' \
+      --set-string inferenceExtension.flags.secure-serving=false \
       --set provider.name=$PROVIDER \
       --version $STANDALONE_CHART_VERSION \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/standalone
@@ -164,7 +167,7 @@ EOF
 ```
 Send an inference request via
 ```bash
-kubectl exec curl -- curl -i http://vllm-qwen3-32b-epp-standalone:8081/v1/completions \
+kubectl exec curl -- curl -i http://vllm-qwen3-32b-standalone-epp:8081/v1/completions \
 -H 'Content-Type: application/json' \
 -d '{"model": "Qwen/Qwen3-32B","prompt": "Write as if you were a critic: San Francisco","max_tokens": 100,"temperature": 0}'
 ```

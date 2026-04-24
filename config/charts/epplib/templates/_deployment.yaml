@@ -30,6 +30,10 @@ spec:
       {{- $proxyType := include "gateway-api-inference-extension.sidecarProxyType" . | trim }}
       {{- $sidecarConfigMap := index $sidecar "configMap" | default dict }}
       {{- $sidecarConfigMapName := index $sidecarConfigMap "name" | default "" }}
+      {{- $inferenceExtensionFlags := deepCopy (.Values.inferenceExtension.flags | default dict) }}
+      {{- if and (eq $proxyType "agentgateway") (not (hasKey $inferenceExtensionFlags "secure-serving")) }}
+        {{- $_ := set $inferenceExtensionFlags "secure-serving" false }}
+      {{- end }}
       serviceAccountName: {{ include "gateway-api-inference-extension.name" . }}
       # Conservatively, this timeout should mirror the longest grace period of the pods within the pool
       terminationGracePeriodSeconds: 130
@@ -104,7 +108,7 @@ spec:
               - --endpoint-selector
               - {{ .Values.inferenceExtension.endpointsServer.endpointSelector | quote }}
               - --endpoint-target-ports
-              - {{ .Values.inferenceExtension.endpointsServer.targetPorts | quote }}
+              - {{ include "gateway-api-inference-extension.standaloneEndpointTargetPorts" . | quote }}
           {{- else }}
               - --pool-name
               - {{ .Release.Name }}
@@ -151,7 +155,7 @@ spec:
           {{- end }}
               # Pass additional flags via the inferenceExtension.flags field in values.yaml.
               # Render them as --flag=value so boolean values are parsed correctly.
-          {{- range $key, $value := .Values.inferenceExtension.flags }}
+          {{- range $key, $value := $inferenceExtensionFlags }}
               - {{ printf "--%s=%v" $key $value | quote }}
           {{- end }}
           {{- if .Values.inferenceExtension.tracing.enabled }}

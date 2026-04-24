@@ -71,6 +71,70 @@ Return the standalone sidecar proxy type.
 {{- end -}}
 
 {{/*
+Normalize a scalar, comma-separated string, or list of ports into a
+comma-separated numeric string.
+*/}}
+{{- define "gateway-api-inference-extension.normalizedPortList" -}}
+{{- $path := .path -}}
+{{- $value := .value -}}
+{{- if empty $value -}}
+  {{- fail (printf "%s is required" $path) -}}
+{{- end -}}
+{{- $rawPorts := list -}}
+{{- if kindIs "slice" $value -}}
+  {{- $rawPorts = $value -}}
+{{- else -}}
+  {{- $rawPorts = splitList "," (toString $value) -}}
+{{- end -}}
+{{- $ports := list -}}
+{{- range $raw := $rawPorts -}}
+  {{- $rawString := trim (toString $raw) -}}
+  {{- if not (regexMatch "^[0-9]+$" $rawString) -}}
+    {{- fail (printf "%s must contain only numeric ports, got %q" $path $rawString) -}}
+  {{- end -}}
+  {{- $port := int $rawString -}}
+  {{- if or (lt $port 1) (gt $port 65535) -}}
+    {{- fail (printf "%s must contain ports between 1 and 65535, got %d" $path $port) -}}
+  {{- end -}}
+  {{- $ports = append $ports (toString $port) -}}
+{{- end -}}
+{{- if eq (len $ports) 0 -}}
+  {{- fail (printf "%s must contain at least one port" $path) -}}
+{{- end -}}
+{{- join "," $ports -}}
+{{- end -}}
+
+{{/*
+Return the standalone proxy listener port exposed by the EPP Service.
+*/}}
+{{- define "gateway-api-inference-extension.standaloneProxyListenerPort" -}}
+{{- $listenerPort := 8081 -}}
+{{- $servicePorts := .Values.inferenceExtension.extraServicePorts | default list -}}
+{{- if gt (len $servicePorts) 0 -}}
+  {{- $servicePort := index $servicePorts 0 -}}
+  {{- $listenerPort = include "gateway-api-inference-extension.normalizedPortList" (dict "path" ".Values.inferenceExtension.extraServicePorts[0].targetPort" "value" ((index $servicePort "targetPort") | default (index $servicePort "port"))) | int -}}
+{{- end -}}
+{{- $listenerPort -}}
+{{- end -}}
+
+{{/*
+Return the standalone EPP model-server target ports.
+*/}}
+{{- define "gateway-api-inference-extension.standaloneEndpointTargetPorts" -}}
+{{- include "gateway-api-inference-extension.normalizedPortList" (dict "path" ".Values.inferenceExtension.endpointsServer.targetPorts" "value" .Values.inferenceExtension.endpointsServer.targetPorts) -}}
+{{- end -}}
+
+{{/*
+Return the agentgateway model Service ports.
+*/}}
+{{- define "gateway-api-inference-extension.agentgateway.modelServicePorts" -}}
+{{- $sidecarValues := .Values.inferenceExtension.sidecar | default dict -}}
+{{- $agentgateway := index $sidecarValues "agentgateway" | default dict -}}
+{{- $service := index $agentgateway "service" | default dict -}}
+{{- include "gateway-api-inference-extension.normalizedPortList" (dict "path" ".Values.inferenceExtension.sidecar.agentgateway.service.ports" "value" (index $service "ports")) -}}
+{{- end -}}
+
+{{/*
 Return the resolved sidecar configuration for the current chart.
 Standalone uses proxy presets merged with explicit sidecar overrides.
 */}}
@@ -82,6 +146,17 @@ Standalone uses proxy presets merged with explicit sidecar overrides.
   {{- $presets := index $sidecar "presets" | default dict -}}
   {{- $preset := deepCopy ((index $presets $proxyType) | default dict) -}}
   {{- $resolved = mergeOverwrite $preset $sidecar -}}
+  {{- if eq $proxyType "agentgateway" -}}
+    {{- $listenerPort := include "gateway-api-inference-extension.standaloneProxyListenerPort" . | int -}}
+    {{- $ports := index $resolved "ports" | default list -}}
+    {{- $resolvedPorts := list (dict "containerPort" $listenerPort "name" (printf "http-%d" $listenerPort)) -}}
+    {{- range $index, $port := $ports -}}
+      {{- if gt $index 0 -}}
+        {{- $resolvedPorts = append $resolvedPorts $port -}}
+      {{- end -}}
+    {{- end -}}
+    {{- $_ := set $resolved "ports" $resolvedPorts -}}
+  {{- end -}}
 {{- end -}}
 {{- $resolved = omit $resolved "agentgateway" "presets" "proxyType" -}}
 {{- toYaml $resolved -}}
@@ -134,12 +209,9 @@ Render the default standalone agentgateway sidecar config template.
 {{- $service := index $agentgateway "service" | default dict -}}
 {{- $serviceName := index $service "name" | default "" -}}
 {{- $serviceNamespace := index $service "namespace" | default .Release.Namespace -}}
-{{- $servicePort := index $service "port" | default 8000 -}}
-{{- $listenerPort := 8081 -}}
-{{- $servicePorts := .Values.inferenceExtension.extraServicePorts | default list -}}
-{{- if gt (len $servicePorts) 0 -}}
-  {{- $listenerPort = int ((index $servicePorts 0).targetPort | default (index $servicePorts 0).port) -}}
-{{- end -}}
+{{- $servicePorts := splitList "," (include "gateway-api-inference-extension.agentgateway.modelServicePorts" .) -}}
+{{- $backendPort := index $servicePorts 0 -}}
+{{- $listenerPort := include "gateway-api-inference-extension.standaloneProxyListenerPort" . | int -}}
 config:
   statsAddr: "0.0.0.0:15020"
   readinessAddr: "0.0.0.0:15021"
@@ -156,7 +228,7 @@ binds:
       backends:
       - service:
           name: {{ printf "%s/%s" $serviceNamespace $serviceName | quote }}
-          port: {{ $servicePort }}
+          port: {{ $backendPort }}
         policies:
           inferenceRouting:
             endpointPicker:
@@ -167,5 +239,7 @@ services:
   hostname: {{ $serviceName | quote }}
   vips: []
   ports:
+    {{- range $servicePort := $servicePorts }}
     {{ $servicePort }}: {{ $servicePort }}
+    {{- end }}
 {{- end -}}

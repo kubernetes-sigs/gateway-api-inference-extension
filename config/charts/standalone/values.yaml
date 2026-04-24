@@ -20,7 +20,8 @@ inferenceExtension:
     # Required when createInferencePool is false
 #    endpointSelector: app=vllm-qwen3-32b
     # unused when createInferencePool is true
-    targetPorts: 8000
+    targetPorts:
+      - 8000
     # unused when createInferencePool is true
     modelServerType: vllm # vllm, sglang, triton-tensorrt-llm, trtllm-serve
 
@@ -36,7 +37,9 @@ inferenceExtension:
         create: true
         name: ""
         namespace: ""
-        port: 8000
+        # Must match inferenceExtension.endpointsServer.targetPorts.
+        ports:
+          - 8000
 
     # Built-in standalone proxy presets. The selected preset is merged with the
     # top-level sidecar.* fields below, so explicit user overrides still win.

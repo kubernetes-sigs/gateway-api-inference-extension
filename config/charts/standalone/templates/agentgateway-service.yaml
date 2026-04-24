@@ -6,21 +6,23 @@
 {{- $serviceName := index $service "name" | default "" -}}
 {{- if and $sidecar.enabled (eq $proxyType "agentgateway") $serviceCreate (not (empty $serviceName)) -}}
 {{- $serviceNamespace := index $service "namespace" | default .Release.Namespace -}}
-{{- $servicePort := index $service "port" | default 8000 -}}
+{{- $servicePorts := splitList "," (include "gateway-api-inference-extension.agentgateway.modelServicePorts" .) -}}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ $serviceName }}
-  namespace: {{ $serviceNamespace }}
+  name: {{ $serviceName | quote }}
+  namespace: {{ $serviceNamespace | quote }}
   labels:
     {{- include "gateway-api-inference-extension.labels" . | nindent 4 }}
 spec:
   selector:
     {{- include "gateway-api-inference-extension.agentgateway.modelServiceSelectorLabels" . | trim | nindent 4 }}
   ports:
-    - name: http
+    {{- range $servicePort := $servicePorts }}
+    - name: http-{{ $servicePort }}
       port: {{ $servicePort }}
       protocol: TCP
       targetPort: {{ $servicePort }}
+    {{- end }}
   type: ClusterIP
 {{- end -}}

@@ -27,8 +27,21 @@ standalone validations
     {{- $service := index $agentgateway "service" | default dict -}}
     {{- $serviceName := index $service "name" | default "" -}}
     {{- $serviceCreate := index $service "create" | default true -}}
+    {{- if hasKey $service "port" -}}
+      {{- fail ".Values.inferenceExtension.sidecar.agentgateway.service.port has been replaced by .Values.inferenceExtension.sidecar.agentgateway.service.ports" -}}
+    {{- end -}}
     {{- if empty $serviceName -}}
       {{- fail ".Values.inferenceExtension.sidecar.agentgateway.service.name is required when proxyType=agentgateway" -}}
+    {{- end -}}
+    {{- $targetPorts := include "gateway-api-inference-extension.standaloneEndpointTargetPorts" . -}}
+    {{- $servicePorts := include "gateway-api-inference-extension.agentgateway.modelServicePorts" . -}}
+    {{- if ne $targetPorts $servicePorts -}}
+      {{- fail (printf ".Values.inferenceExtension.sidecar.agentgateway.service.ports must match .Values.inferenceExtension.endpointsServer.targetPorts when proxyType=agentgateway, got service ports %q and target ports %q" $servicePorts $targetPorts) -}}
+    {{- end -}}
+    {{- $listenerPort := include "gateway-api-inference-extension.standaloneProxyListenerPort" . -}}
+    {{- $flags := .Values.inferenceExtension.flags | default dict -}}
+    {{- if and (hasKey $flags "secure-serving") (ne (toString (index $flags "secure-serving")) "false") -}}
+      {{- fail ".Values.inferenceExtension.flags.secure-serving must be false when proxyType=agentgateway; standalone agentgateway uses plaintext gRPC to EPP over localhost" -}}
     {{- end -}}
     {{- if $serviceCreate -}}
       {{- $selectorLabels := include "gateway-api-inference-extension.agentgateway.modelServiceSelectorLabels" . -}}
