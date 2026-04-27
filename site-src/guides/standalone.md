@@ -67,8 +67,6 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
 
 === "Envoy"
 
-      Envoy remains the default standalone sidecar and preserves the existing chart behavior.
-
       **With Inference APIs Support**
 
       Deploy an InferencePool named `vllm-qwen3-32b` that selects from endpoints with label `app=vllm-qwen3-32b`
@@ -109,17 +107,10 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
 
 === "Agentgateway"
 
-      Agentgateway can also run as the standalone sidecar proxy. This mode requires a Kubernetes `Service`
-      for the model workload because the local config routes to a `service` backend before consulting the EPP.
-      The standalone chart generates the model `Service` and the minimal agentgateway local config from
-      `inferenceExtension.sidecar.agentgateway.service.*`. The generated `Service` selector is derived from
-      `inferenceExtension.endpointsServer.endpointSelector`, which must use comma-separated `key=value`
-      labels. `inferenceExtension.sidecar.agentgateway.service.ports` must match
-      `inferenceExtension.endpointsServer.targetPorts`. Agentgateway listens on the
-      `inferenceExtension.extraServicePorts` entry named `http` and uses that entry's `port` value.
-      The generated config sets `inferenceRouting.destinationMode: passthrough` so Agentgateway trusts
-      the EPP-selected pod destination directly.
-      `InferencePool` is not supported in this mode.
+      Agentgateway can also run as the standalone sidecar proxy. Configure the generated model
+      `Service` with `inferenceExtension.sidecar.agentgateway.service.*` and select model pods with
+      `inferenceExtension.endpointsServer.endpointSelector`. The service ports must match
+      `inferenceExtension.endpointsServer.targetPorts`, and `InferencePool` is not supported.
 
       **Note:** The chart defaults to `cr.agentgateway.dev/agentgateway:latest-dev` on `main` for this preset.
       Release tooling rewrites this to a stable Agentgateway tag when cutting a release.
