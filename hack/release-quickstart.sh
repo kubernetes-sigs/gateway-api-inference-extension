@@ -107,6 +107,8 @@ sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$STANDALONE_HELM"
 # Update the standalone agentgateway preset from the floating development tag
 # to the stable tag selected for the release.
 sed -i.bak -E "s|(${AGENTGATEWAY_IMAGE_REGEX}:)[^\"[:space:]]+|\1${AGENTGATEWAY_TAG}|g" "$STANDALONE_HELM"
+# Also change the agentgateway imagePullPolicy from Always to IfNotPresent.
+sed -i.bak '/cr\.agentgateway\.dev\/agentgateway/{n;s/Always/IfNotPresent/;}' "$STANDALONE_HELM"
 # Update the conformance EPP image from the staging `main` tag to the release tag.
 sed -i.bak -E "s|${CONFORMANCE_EPP_STAGING_IMAGE}:[^\"[:space:]]+|${CONFORMANCE_EPP_STAGING_IMAGE}:${RELEASE_TAG}|g" "$CONFORMANCE_MANIFESTS"
 # Update the container image pull policy.
