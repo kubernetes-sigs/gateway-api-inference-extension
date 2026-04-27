@@ -98,7 +98,7 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
       export PROVIDER=<YOUR_PROVIDER> # optional, can be gke if you need GKE-specific monitoring resources
       helm install vllm-qwen3-32b-standalone \
       --dependency-update \
-      --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-qwen3-32b" \
+      --set inferenceExtension.endpointsServer.endpointSelector=app=vllm-qwen3-32b \
       --set inferenceExtension.endpointsServer.createInferencePool=false \
       --set provider.name=$PROVIDER \
       --version $STANDALONE_CHART_VERSION \
@@ -125,7 +125,7 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
       --set inferenceExtension.sidecar.proxyType=agentgateway \
       --set inferenceExtension.sidecar.agentgateway.service.name=vllm-qwen3-32b \
       --set 'inferenceExtension.sidecar.agentgateway.service.ports[0]=8000' \
-      --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-qwen3-32b" \
+      --set inferenceExtension.endpointsServer.endpointSelector=app=vllm-qwen3-32b \
       --set inferenceExtension.endpointsServer.createInferencePool=false \
       --set 'inferenceExtension.endpointsServer.targetPorts[0]=8000' \
       --set-string inferenceExtension.flags.secure-serving=false \
