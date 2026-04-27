@@ -119,7 +119,7 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
 
       ```bash
       export STANDALONE_CHART_VERSION=v0
-      export PROVIDER=<YOUR_PROVIDER> # optional, can be gke if you need GKE-specific monitoring resources
+      export GATEWAY_PROVIDER=none # Other providers are supported, e.g. gke.
       helm install vllm-qwen3-32b-standalone \
       --dependency-update \
       --set inferenceExtension.sidecar.proxyType=agentgateway \
@@ -129,7 +129,7 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
       --set inferenceExtension.endpointsServer.createInferencePool=false \
       --set 'inferenceExtension.endpointsServer.targetPorts[0]=8000' \
       --set-string inferenceExtension.flags.secure-serving=false \
-      --set provider.name=$PROVIDER \
+      --set provider.name=$GATEWAY_PROVIDER \
       --version $STANDALONE_CHART_VERSION \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/standalone
       ```
