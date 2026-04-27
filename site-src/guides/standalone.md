@@ -123,7 +123,6 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
       helm install vllm-qwen3-32b-standalone \
       --dependency-update \
       --set inferenceExtension.sidecar.proxyType=agentgateway \
-      --set inferenceExtension.sidecar.imagePullPolicy=Always \
       --set inferenceExtension.sidecar.agentgateway.service.name=vllm-qwen3-32b \
       --set 'inferenceExtension.sidecar.agentgateway.service.ports[0]=8000' \
       --set inferenceExtension.endpointsServer.endpointSelector=app=vllm-qwen3-32b \

@@ -42,9 +42,6 @@ then
     ${YQ} -i \
       '.inferenceExtension.sidecar.presets.agentgateway.image="cr.agentgateway.dev/agentgateway:" + strenv(AGENTGATEWAY_TAG)' \
       config/charts/${CHART}/values.yaml
-    ${YQ} -i \
-      '.inferenceExtension.sidecar.presets.agentgateway.imagePullPolicy="IfNotPresent"' \
-      config/charts/${CHART}/values.yaml
   fi
   chart_version=${EXTRA_TAG}
 fi

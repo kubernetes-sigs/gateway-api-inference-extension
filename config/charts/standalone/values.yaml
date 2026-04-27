@@ -305,7 +305,6 @@ inferenceExtension:
         name: agentgateway-sidecar
         # Keep main on latest-dev; release tooling rewrites this to a stable tag.
         image: cr.agentgateway.dev/agentgateway:latest-dev
-        imagePullPolicy: Always
         args:
           - "-f"
           - "/config/config.yaml"
