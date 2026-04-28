@@ -126,14 +126,19 @@ This document defines the process for releasing Gateway API Inference Extension.
        - `latency-training-server`
     3. If an artifact does not yet have a section in `images.yaml` (for example a newly added chart), add a new section before adding the digest mapping.
     **Note:** Add a link to this issue when the PR is merged.
-10. Test the steps in the tagged quickstart guide after the PR merges, for example: `https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/v0.1.0-rc.1/pkg/README.md`.
+10. Test the quickstart guide steps after the k8s.io PR merges:
+    1. Follow the tagged quickstart guide at `site-src/guides/index.md`, for example: `https://github.com/kubernetes-sigs/gateway-api-inference-extension/blob/v0.1.0-rc.1/site-src/guides/index.md`.
+    2. **Note:** Instead of running the `curl` command to set `IGW_LATEST_RELEASE`, manually set it to the version being tested (e.g., `export IGW_LATEST_RELEASE=v0.1.0-rc.1`). The guide's curl command filters out prereleases and will not resolve the new tag until after it is published.
+    3. **Note:** The release asset URL (`releases/download/.../manifests.yaml`) does not exist yet. Use the locally generated `artifacts/manifests.yaml` for CRD installation during this step.
 11. Create a [new release][]:
     1. Choose the root tag that you created for the release, for example `v1.5.0`.
     2. Use the tag as the release title, i.e. `v0.1.0` refer to previous release for the content of the release body.
     3. Click "Generate release notes" and preview the release body.
     4. Click "Attach binaries by dropping them here or selecting them." and add the contents of the `artifacts` directory generated from `make release`.
     5. If this is a release candidate, select the "This is a pre-release" checkbox.
-12. If you find any bugs in this process, create an [issue][].
+12. Verify the release asset URL after publishing:
+    - Download the `manifests.yaml` asset from the newly created GitHub release and confirm it can be applied successfully with `kubectl apply -f`.
+13. If you find any bugs in this process, create an [issue][].
 
 ## Announce the Release
 
