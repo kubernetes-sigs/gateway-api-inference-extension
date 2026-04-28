@@ -20,10 +20,8 @@ set -o pipefail
 
 DEST_CHART_DIR=${DEST_CHART_DIR:-bin/}
 
-EXTRA_TAG=${EXTRA_TAG:-$(git branch --show-current)}
+EXTRA_TAG=${EXTRA_TAG:-$(git branch --show-current)} 
 CHART_VERSION=${CHART_VERSION:-"v0"}
-AGENTGATEWAY_TAG=${AGENTGATEWAY_TAG:-${EXTRA_TAG}}
-export EXTRA_TAG AGENTGATEWAY_TAG
 
 STAGING_IMAGE_REGISTRY=${STAGING_IMAGE_REGISTRY:-us-central1-docker.pkg.dev/k8s-staging-images}
 IMAGE_REGISTRY=${IMAGE_REGISTRY:-${STAGING_IMAGE_REGISTRY}/gateway-api-inference-extension}
@@ -38,11 +36,6 @@ chart_version=${CHART_VERSION}
 if [[ ${EXTRA_TAG} =~ ${semver_regex} ]]
 then
   ${YQ} -i '.inferenceExtension.image.tag=strenv(EXTRA_TAG)' config/charts/${CHART}/values.yaml
-  if [[ ${CHART} == "standalone" ]]; then
-    ${YQ} -i \
-      '.inferenceExtension.sidecar.presets.agentgateway.image="cr.agentgateway.dev/agentgateway:" + strenv(AGENTGATEWAY_TAG)' \
-      config/charts/${CHART}/values.yaml
-  fi
   chart_version=${EXTRA_TAG}
 fi
 

@@ -92,15 +92,14 @@ data:
   {{- end }}
   
 ---
-{{- $sidecar := include "gateway-api-inference-extension.sidecar" . | fromYaml | default dict }}
-{{- if and $sidecar.enabled $sidecar.configMap }}
+{{- if and .Values.inferenceExtension.sidecar.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ $sidecar.configMap.name }}
+  name: {{ .Values.inferenceExtension.sidecar.configMap.name }}
   namespace: {{ .Release.Namespace }}
 data:
-  {{- include "gateway-api-inference-extension.sidecarConfigMapData" . | nindent 2 }}
+  {{- .Values.inferenceExtension.sidecar.configMap.data | toYaml | nindent 2 }}
 {{- end }}
 ---
 {{- if .Values.inferenceExtension.latencyPredictor.enabled }}

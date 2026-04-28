@@ -1,4 +1,3 @@
-{{ include "gateway-api-inference-extension.validations.standalone" . }}
 {{ include "inference-extension.config" . }}
 {{ include "inference-extension.deployment" . }}
 {{ include "inference-extension.gke" . }}
