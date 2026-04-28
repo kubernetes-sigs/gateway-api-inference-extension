@@ -26,47 +26,70 @@ spec:
         {{- include "gateway-api-inference-extension.selectorLabels" . | nindent 8 }}
         {{- include "gateway-api-inference-extension.modeLabels" . | nindent 8 }}
     spec:
+      {{- $sidecar := include "gateway-api-inference-extension.sidecar" . | fromYaml | default dict }}
+      {{- $proxyType := include "gateway-api-inference-extension.sidecarProxyType" . | trim }}
+      {{- $sidecarConfigMap := index $sidecar "configMap" | default dict }}
+      {{- $sidecarConfigMapName := index $sidecarConfigMap "name" | default "" }}
+      {{- $inferenceExtensionFlags := deepCopy (.Values.inferenceExtension.flags | default dict) }}
+      {{- if and (eq $proxyType "agentgateway") (not (hasKey $inferenceExtensionFlags "secure-serving")) }}
+        {{- $_ := set $inferenceExtensionFlags "secure-serving" false }}
+      {{- end }}
       serviceAccountName: {{ include "gateway-api-inference-extension.name" . }}
       # Conservatively, this timeout should mirror the longest grace period of the pods within the pool
       terminationGracePeriodSeconds: 130
       containers:
-      {{- if .Values.inferenceExtension.sidecar.enabled }}
-        - name: {{ .Values.inferenceExtension.sidecar.name }}
-          image: {{ .Values.inferenceExtension.sidecar.image }}
-          imagePullPolicy: {{ .Values.inferenceExtension.sidecar.imagePullPolicy | default "IfNotPresent" }}
-        {{- with .Values.inferenceExtension.sidecar.command }}
+      {{- if $sidecar.enabled }}
+        - name: {{ $sidecar.name }}
+          image: {{ $sidecar.image }}
+          imagePullPolicy: {{ $sidecar.imagePullPolicy | default "IfNotPresent" }}
+        {{- with $sidecar.command }}
           command:
             - {{ . | quote }}
         {{- end }}
-        {{- with .Values.inferenceExtension.sidecar.args }}
+        {{- with $sidecar.args }}
           args:
           {{- range . }}
             - {{ . | quote }}
           {{- end }}
         {{- end }}
-        {{- with .Values.inferenceExtension.sidecar.env }}
+        {{- with $sidecar.env }}
           env:
           {{- toYaml . | nindent 10 }}
           {{- end }}
-        {{- with .Values.inferenceExtension.sidecar.ports }}
+        {{- with $sidecar.ports }}
           ports:
           {{- toYaml . | nindent 10 }}
         {{- end }}
-        {{- with .Values.inferenceExtension.sidecar.livenessProbe }}
+        {{- with $sidecar.livenessProbe }}
           livenessProbe:
           {{- toYaml . | nindent 12 }}
         {{- end }}
-        {{- with .Values.inferenceExtension.sidecar.readinessProbe }}
+        {{- with $sidecar.readinessProbe }}
           readinessProbe:
           {{- toYaml . | nindent 12 }}
         {{- end }}
-        {{- with .Values.inferenceExtension.sidecar.resources }}
+        {{- with $sidecar.startupProbe }}
+          startupProbe:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- with $sidecar.securityContext }}
+          securityContext:
+          {{- toYaml . | nindent 12 }}
+        {{- end }}
+        {{- with $sidecar.resources }}
           resources:
           {{- toYaml . | nindent 12 }}
         {{- end }}
-        {{- with .Values.inferenceExtension.sidecar.volumeMounts }}
+        {{- if or (and (eq $proxyType "agentgateway") $sidecarConfigMapName) $sidecar.volumeMounts }}
           volumeMounts:
+          {{- if and (eq $proxyType "agentgateway") $sidecarConfigMapName }}
+            - name: agentgateway-config-template
+              mountPath: /config
+              readOnly: true
+          {{- end }}
+          {{- with $sidecar.volumeMounts }}
           {{- toYaml . | nindent 12 }}
+          {{- end }}
         {{- end }}
         {{- end }}
         - name: epp
@@ -85,7 +108,7 @@ spec:
               - --endpoint-selector
               - {{ .Values.inferenceExtension.endpointsServer.endpointSelector | quote }}
               - --endpoint-target-ports
-              - {{ .Values.inferenceExtension.endpointsServer.targetPorts | quote }}
+              - {{ include "gateway-api-inference-extension.standaloneEndpointTargetPorts" . | quote }}
           {{- else }}
               - --pool-name
               - {{ .Release.Name }}
@@ -131,8 +154,9 @@ spec:
               - --ha-enable-leader-election
           {{- end }}
               # Pass additional flags via the inferenceExtension.flags field in values.yaml.
-          {{- range $key, $value := .Values.inferenceExtension.flags }}
-              - --{{ $key }}={{ $value }}
+              # Render them as --flag=value so boolean values are parsed correctly.
+          {{- range $key, $value := $inferenceExtensionFlags }}
+              - {{ printf "--%s=%v" $key $value | quote }}
           {{- end }}
           {{- if .Values.inferenceExtension.tracing.enabled }}
               - --tracing=true
@@ -227,8 +251,16 @@ spec:
       {{- if .Values.inferenceExtension.volumes }}
       {{- toYaml .Values.inferenceExtension.volumes | nindent 8 }}
       {{- end }}
-      {{- if .Values.inferenceExtension.sidecar.volumes }}
-      {{- tpl (toYaml .Values.inferenceExtension.sidecar.volumes) $ | nindent 8 }}
+      {{- if and $sidecar.enabled (eq $proxyType "agentgateway") $sidecarConfigMapName }}
+        - name: agentgateway-config-template
+          configMap:
+            name: {{ $sidecarConfigMapName }}
+            items:
+              - key: config.yaml
+                path: config.yaml
+      {{- end }}
+      {{- with $sidecar.volumes }}
+      {{- tpl (toYaml .) $ | nindent 8 }}
       {{- end }}
         - name: plugins-config-volume
           configMap:

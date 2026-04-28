@@ -37,11 +37,14 @@ VLLM_GPU="${VLLM_GPU:-0.18.1}"
 VLLM_CPU="${VLLM_CPU:-0.18.1}"
 # The sim image is from https://github.com/llm-d/llm-d-inference-sim/pkgs/container/llm-d-inference-sim
 VLLM_SIM="${VLLM_SIM:-0.8.2}"
+# The agentgateway image is from https://github.com/agentgateway/agentgateway/pkgs/container/agentgateway
+AGENTGATEWAY_TAG="${AGENTGATEWAY_TAG:-${RELEASE_TAG}}"
 
 echo "Using release tag: ${RELEASE_TAG}"
 echo "Using vLLM GPU image version: ${VLLM_GPU}"
 echo "Using vLLM CPU image version: ${VLLM_CPU}"
 echo "Using vLLM Simulator image version: ${VLLM_SIM}"
+echo "Using agentgateway image tag: ${AGENTGATEWAY_TAG}"
 
 # -----------------------------------------------------------------------------
 # Update version/version.go and generating CRDs with new version annotations
@@ -93,6 +96,7 @@ BBR_HELM="config/charts/body-based-routing/values.yaml"
 STANDALONE_HELM="config/charts/standalone/values.yaml"
 CONFORMANCE_MANIFESTS="conformance/resources/base.yaml"
 CONFORMANCE_EPP_STAGING_IMAGE="us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp"
+AGENTGATEWAY_IMAGE_REGEX="cr\.agentgateway\.dev/agentgateway"
 echo "Updating ${EPP_HELM}, ${LATENCY_ROUTING_HELM}, ${BBR_HELM}, ${STANDALONE_HELM} and ${CONFORMANCE_MANIFESTS} ..."
 
 # Update the container tag.
@@ -100,6 +104,9 @@ sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP_HELM"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$LATENCY_ROUTING_HELM"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$BBR_HELM"
 sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$STANDALONE_HELM"
+# Update the standalone agentgateway preset from the floating development tag
+# to the stable tag selected for the release.
+sed -i.bak -E "s|(${AGENTGATEWAY_IMAGE_REGEX}:)[^\"[:space:]]+|\1${AGENTGATEWAY_TAG}|g" "$STANDALONE_HELM"
 # Update the conformance EPP image from the staging `main` tag to the release tag.
 sed -i.bak -E "s|${CONFORMANCE_EPP_STAGING_IMAGE}:[^\"[:space:]]+|${CONFORMANCE_EPP_STAGING_IMAGE}:${RELEASE_TAG}|g" "$CONFORMANCE_MANIFESTS"
 # Update the container image pull policy.
