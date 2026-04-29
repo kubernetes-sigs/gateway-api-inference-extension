@@ -97,7 +97,7 @@ type InferencePoolSpec struct {
 	// associated configuration.
 	//
 	// +optional
-	EndpointPickerRef *EndpointPickerRef `json:"endpointPickerRef,omitzero,omitempty"`
+	EndpointPickerRef *EndpointPickerRef `json:"endpointPickerRef,omitempty"`
 }
 
 // Port defines the network port that will be exposed by this InferencePool.
