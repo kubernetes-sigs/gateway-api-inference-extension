@@ -96,8 +96,8 @@ type InferencePoolSpec struct {
 	// EndpointPickerRef is a reference to the Endpoint Picker extension and its
 	// associated configuration.
 	//
-	// +required
-	EndpointPickerRef EndpointPickerRef `json:"endpointPickerRef,omitzero"`
+	// +optional
+	EndpointPickerRef *EndpointPickerRef `json:"endpointPickerRef,omitzero,omitempty"`
 }
 
 // Port defines the network port that will be exposed by this InferencePool.
