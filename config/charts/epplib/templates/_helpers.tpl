@@ -150,13 +150,23 @@ Return the standalone EPP model-server target ports.
 {{- end -}}
 
 {{/*
-Return the agentgateway model Service ports.
+Return the agentgateway logical model backend name.
 */}}
-{{- define "gateway-api-inference-extension.agentgateway.modelServicePorts" -}}
-{{- $sidecarValues := .Values.inferenceExtension.sidecar | default dict -}}
-{{- $agentgateway := index $sidecarValues "agentgateway" | default dict -}}
-{{- $service := index $agentgateway "service" | default dict -}}
-{{- include "gateway-api-inference-extension.normalizedPortList" (dict "path" ".Values.inferenceExtension.sidecar.agentgateway.service.ports" "value" (index $service "ports")) -}}
+{{- define "gateway-api-inference-extension.agentgateway.logicalBackendName" -}}
+{{- $selector := .Values.inferenceExtension.endpointsServer.endpointSelector | default "" -}}
+{{- $appName := "" -}}
+{{- range $raw := splitList "," $selector -}}
+  {{- $part := trim $raw -}}
+  {{- $kv := splitList "=" $part -}}
+  {{- if and (eq (len $kv) 2) (eq (trim (index $kv 0)) "app") -}}
+    {{- $appName = trim (index $kv 1) -}}
+  {{- end -}}
+{{- end -}}
+{{- if not (empty $appName) -}}
+  {{- $appName -}}
+{{- else -}}
+  {{- .Release.Name -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -202,39 +212,12 @@ Return the rendered sidecar ConfigMap data.
 {{- end -}}
 
 {{/*
-Render labels from the standalone endpoint selector for the generated model Service.
-Only equality-based selectors are supported because Service selectors are a map.
-*/}}
-{{- define "gateway-api-inference-extension.agentgateway.modelServiceSelectorLabels" -}}
-{{- $selector := .Values.inferenceExtension.endpointsServer.endpointSelector | default "" -}}
-{{- if empty $selector -}}
-  {{- fail ".Values.inferenceExtension.endpointsServer.endpointSelector is required when creating an agentgateway model Service" -}}
-{{- end -}}
-{{- range $raw := splitList "," $selector }}
-  {{- $part := trim $raw -}}
-  {{- $kv := splitList "=" $part -}}
-  {{- if ne (len $kv) 2 -}}
-    {{- fail (printf ".Values.inferenceExtension.endpointsServer.endpointSelector must use comma-separated key=value labels when creating an agentgateway model Service, got %q" $selector) -}}
-  {{- end -}}
-  {{- $key := trim (index $kv 0) -}}
-  {{- $value := trim (index $kv 1) -}}
-  {{- if or (empty $key) (empty $value) -}}
-    {{- fail (printf ".Values.inferenceExtension.endpointsServer.endpointSelector must use non-empty key=value labels when creating an agentgateway model Service, got %q" $selector) -}}
-  {{- end -}}
-{{- printf "%s: %s\n" ($key | quote) ($value | quote) -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
 Render the default standalone agentgateway sidecar config template.
 */}}
 {{- define "gateway-api-inference-extension.sidecar.agentgatewayConfig" -}}
-{{- $sidecarValues := .Values.inferenceExtension.sidecar | default dict -}}
-{{- $agentgateway := index $sidecarValues "agentgateway" | default dict -}}
-{{- $service := index $agentgateway "service" | default dict -}}
-{{- $serviceName := index $service "name" | default "" -}}
-{{- $serviceNamespace := index $service "namespace" | default .Release.Namespace -}}
-{{- $servicePorts := splitList "," (include "gateway-api-inference-extension.agentgateway.modelServicePorts" .) -}}
+{{- $serviceName := include "gateway-api-inference-extension.agentgateway.logicalBackendName" . -}}
+{{- $serviceNamespace := .Release.Namespace -}}
+{{- $servicePorts := splitList "," (include "gateway-api-inference-extension.standaloneEndpointTargetPorts" .) -}}
 {{- $backendPort := index $servicePorts 0 -}}
 {{- $listenerPort := include "gateway-api-inference-extension.standaloneProxyListenerPort" . | int -}}
 config:

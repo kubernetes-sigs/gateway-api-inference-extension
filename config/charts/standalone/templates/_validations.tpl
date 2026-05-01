@@ -19,32 +19,18 @@ standalone validations
   {{- if not (or (eq $proxyType "envoy") (eq $proxyType "agentgateway")) -}}
     {{- fail (printf ".Values.inferenceExtension.sidecar.proxyType must be one of [envoy, agentgateway], got %q" $proxyType) -}}
   {{- end -}}
-  {{- if eq $proxyType "agentgateway" -}}
+    {{- if eq $proxyType "agentgateway" -}}
     {{- if and .Values.inferenceExtension.endpointsServer .Values.inferenceExtension.endpointsServer.createInferencePool -}}
-      {{- fail ".Values.inferenceExtension.endpointsServer.createInferencePool=false is required when proxyType=agentgateway; standalone agentgateway currently supports only service-backed routing" -}}
+      {{- fail ".Values.inferenceExtension.endpointsServer.createInferencePool=false is required when proxyType=agentgateway; standalone agentgateway uses EPP endpoint discovery with a logical service backend" -}}
     {{- end -}}
-    {{- $agentgateway := index $sidecar "agentgateway" | default dict -}}
-    {{- $service := index $agentgateway "service" | default dict -}}
-    {{- $serviceName := index $service "name" | default "" -}}
-    {{- $serviceCreate := index $service "create" | default true -}}
-    {{- if hasKey $service "port" -}}
-      {{- fail ".Values.inferenceExtension.sidecar.agentgateway.service.port has been replaced by .Values.inferenceExtension.sidecar.agentgateway.service.ports" -}}
+    {{- if hasKey $sidecar "agentgateway" -}}
+      {{- fail ".Values.inferenceExtension.sidecar.agentgateway is no longer supported; standalone agentgateway derives its logical backend from endpointsServer settings" -}}
     {{- end -}}
-    {{- if empty $serviceName -}}
-      {{- fail ".Values.inferenceExtension.sidecar.agentgateway.service.name is required when proxyType=agentgateway" -}}
-    {{- end -}}
-    {{- $targetPorts := include "gateway-api-inference-extension.standaloneEndpointTargetPorts" . -}}
-    {{- $servicePorts := include "gateway-api-inference-extension.agentgateway.modelServicePorts" . -}}
-    {{- if ne $targetPorts $servicePorts -}}
-      {{- fail (printf ".Values.inferenceExtension.sidecar.agentgateway.service.ports must match .Values.inferenceExtension.endpointsServer.targetPorts when proxyType=agentgateway, got service ports %q and target ports %q" $servicePorts $targetPorts) -}}
-    {{- end -}}
-    {{- $listenerPort := include "gateway-api-inference-extension.standaloneProxyListenerPort" . -}}
+    {{- $_ := include "gateway-api-inference-extension.standaloneEndpointTargetPorts" . -}}
+    {{- $_ := include "gateway-api-inference-extension.standaloneProxyListenerPort" . -}}
     {{- $flags := .Values.inferenceExtension.flags | default dict -}}
     {{- if and (hasKey $flags "secure-serving") (ne (toString (index $flags "secure-serving")) "false") -}}
       {{- fail ".Values.inferenceExtension.flags.secure-serving must be false when proxyType=agentgateway; standalone agentgateway uses plaintext gRPC to EPP over localhost" -}}
-    {{- end -}}
-    {{- if $serviceCreate -}}
-      {{- $selectorLabels := include "gateway-api-inference-extension.agentgateway.modelServiceSelectorLabels" . -}}
     {{- end -}}
   {{- end -}}
 {{- end -}}

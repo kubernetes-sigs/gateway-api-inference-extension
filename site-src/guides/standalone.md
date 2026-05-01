@@ -24,8 +24,7 @@ A simpler deployment mode would reduce the barrier to adopting the EPP for such 
 ## How
 
 A proxy is deployed as a sidecar to the EPP. The proxy and EPP communicate over localhost. The standalone chart currently provides built-in sidecar presets for Envoy
-and agentgateway. Envoy mirrors the existing ext-proc sidecar flow. Agentgateway uses its standalone `inferenceRouting` local config support and therefore requires a
-Kubernetes `Service` for the model workload. Envoy supports two endpoint discovery modes:
+and agentgateway. Envoy mirrors the existing ext-proc sidecar flow. Envoy supports two endpoint discovery modes:
 
 * **With Inference APIs Support**: The EPP is configured using the Inference CRDs, the pool is expressed using an instance of the InferencePool API and the entire suite of inference APIs are supported, including the use of InferenceObjectives for defining priorities.
 * **Without Inference APIs Support**: The EPP is configured using command line flags. This is the simplest method for standalone jobs which doesn't require installing the inference extension apis, which means no support for the features expressed using the inference APIs (such as InferenceObjectives).
@@ -109,17 +108,10 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
 
 === "Agentgateway"
 
-      Agentgateway can also run as the standalone sidecar proxy. This mode requires a Kubernetes `Service`
-      for the model workload because the local config routes to a `service` backend before consulting the EPP.
-      The standalone chart generates the model `Service` and the minimal agentgateway local config from
-      `inferenceExtension.sidecar.agentgateway.service.*`. The generated `Service` selector is derived from
-      `inferenceExtension.endpointsServer.endpointSelector`, which must use comma-separated `key=value`
-      labels. `inferenceExtension.sidecar.agentgateway.service.ports` must match
-      `inferenceExtension.endpointsServer.targetPorts`. Agentgateway listens on the
-      `inferenceExtension.extraServicePorts` entry named `http` and uses that entry's `port` value.
-      The generated config sets `inferenceRouting.destinationMode: passthrough` so Agentgateway trusts
-      the EPP-selected pod destination directly.
-      `InferencePool` is not supported in this mode.
+      Agentgateway can also run as the standalone sidecar proxy. Configure the model pods with
+      `inferenceExtension.endpointsServer.endpointSelector`, and set
+      `inferenceExtension.endpointsServer.createInferencePool=false`.
+      `InferencePool` is not supported with agentgateway in standalone mode.
 
       **Note:** The chart defaults to `cr.agentgateway.dev/agentgateway:latest-dev` on `main` for this preset.
       Release tooling rewrites this to a stable Agentgateway tag when cutting a release.
@@ -132,11 +124,8 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
       helm install vllm-qwen3-32b-standalone \
       --dependency-update \
       --set inferenceExtension.sidecar.proxyType=agentgateway \
-      --set inferenceExtension.sidecar.agentgateway.service.name=vllm-qwen3-32b \
-      --set 'inferenceExtension.sidecar.agentgateway.service.ports[0]=8000' \
       --set inferenceExtension.endpointsServer.endpointSelector="app=vllm-qwen3-32b" \
       --set inferenceExtension.endpointsServer.createInferencePool=false \
-      --set 'inferenceExtension.endpointsServer.targetPorts[0]=8000' \
       --set-string inferenceExtension.flags.secure-serving=false \
       --set provider.name=$PROVIDER \
       --version $STANDALONE_CHART_VERSION \
