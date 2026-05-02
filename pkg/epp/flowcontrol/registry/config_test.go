@@ -771,6 +771,46 @@ func TestNewConfigFromAPI(t *testing.T) {
 			},
 			expectedErr: "DefaultPriorityBand MaxRequests must be non-negative",
 		},
+
+		// --- DefaultNegativePriorityBand ---
+		{
+			name: "ShouldSucceed_WithDefaultNegativePriorityBand",
+			apiConfig: &configapi.FlowControlConfig{
+				DefaultNegativePriorityBand: &configapi.PriorityBandConfig{
+					MaxBytes: ptr.To(resource.MustParse("100")),
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				require.NotNil(t, cfg.DefaultNegativePriorityBand)
+				assert.Equal(t, uint64(100), cfg.DefaultNegativePriorityBand.MaxBytes,
+					"DefaultNegativePriorityBand MaxBytes should be translated")
+				assert.NotNil(t, cfg.DefaultNegativePriorityBand.OrderingPolicy,
+					"DefaultNegativePriorityBand should have defaults applied")
+			},
+		},
+		{
+			name: "ShouldFallBackToDefaultBand_WhenNegativeBandIsNil",
+			apiConfig: &configapi.FlowControlConfig{
+				DefaultPriorityBand: &configapi.PriorityBandConfig{
+					MaxBytes: ptr.To(resource.MustParse("500")),
+				},
+			},
+			assertion: func(t *testing.T, cfg *Config) {
+				assert.Nil(t, cfg.DefaultNegativePriorityBand,
+					"DefaultNegativePriorityBand should remain nil when not configured")
+				require.NotNil(t, cfg.DefaultPriorityBand)
+				assert.Equal(t, uint64(500), cfg.DefaultPriorityBand.MaxBytes)
+			},
+		},
+		{
+			name: "ShouldError_WithNegativeDefaultNegativePriorityBandMaxBytes",
+			apiConfig: &configapi.FlowControlConfig{
+				DefaultNegativePriorityBand: &configapi.PriorityBandConfig{
+					MaxBytes: ptr.To(resource.MustParse("-1")),
+				},
+			},
+			expectedErr: "DefaultPriorityBand MaxBytes must be non-negative",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -791,4 +831,60 @@ func TestNewConfigFromAPI(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewConfig_DefaultNegativePriorityBand(t *testing.T) {
+	t.Parallel()
+	handle := newTestPluginsHandle(t)
+
+	t.Run("ShouldAcceptNegativeBandTemplate", func(t *testing.T) {
+		t.Parallel()
+		cfg, err := NewConfig(handle,
+			WithDefaultNegativePriorityBand(&PriorityBandConfig{
+				MaxBytes: 500,
+			}),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, cfg.DefaultNegativePriorityBand)
+		assert.Equal(t, uint64(500), cfg.DefaultNegativePriorityBand.MaxBytes)
+		assert.NotNil(t, cfg.DefaultNegativePriorityBand.OrderingPolicy,
+			"Defaults should be applied to DefaultNegativePriorityBand")
+	})
+
+	t.Run("ShouldAllowZeroMaxBytes_ForSheddableTraffic", func(t *testing.T) {
+		t.Parallel()
+		cfg, err := NewConfig(handle,
+			WithDefaultNegativePriorityBand(&PriorityBandConfig{}),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, cfg.DefaultNegativePriorityBand)
+		// MaxBytes=0 gets defaulted to 1GB via applyDefaults
+		assert.Equal(t, defaultPriorityBandMaxBytes, cfg.DefaultNegativePriorityBand.MaxBytes)
+	})
+
+	t.Run("ShouldValidateNegativeBandTemplate", func(t *testing.T) {
+		t.Parallel()
+		_, err := NewConfig(handle,
+			WithDefaultNegativePriorityBand(&PriorityBandConfig{
+				Queue: "non-existent-queue",
+			}),
+		)
+		require.Error(t, err, "Should fail validation for invalid queue in negative band template")
+	})
+
+	t.Run("ShouldCloneNegativeBandTemplate", func(t *testing.T) {
+		t.Parallel()
+		original, err := NewConfig(handle,
+			WithDefaultNegativePriorityBand(&PriorityBandConfig{
+				MaxBytes: 200,
+			}),
+		)
+		require.NoError(t, err)
+
+		clone := original.Clone()
+		require.NotNil(t, clone.DefaultNegativePriorityBand)
+		require.NotSame(t, original.DefaultNegativePriorityBand, clone.DefaultNegativePriorityBand,
+			"Clone should have a distinct pointer for DefaultNegativePriorityBand")
+		assert.Equal(t, original.DefaultNegativePriorityBand.MaxBytes, clone.DefaultNegativePriorityBand.MaxBytes)
+	})
 }

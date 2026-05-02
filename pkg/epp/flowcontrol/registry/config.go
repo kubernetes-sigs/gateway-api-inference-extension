@@ -131,6 +131,12 @@ type Config struct {
 	// If nil, it is automatically populated with system defaults during NewConfig.
 	DefaultPriorityBand *PriorityBandConfig
 
+	// DefaultNegativePriorityBand is an optional template for dynamically provisioning priority bands when a request
+	// arrives with a priority level strictly below zero. This allows setting lower capacity limits (or zero) for
+	// negative-priority traffic to designate it as sheddable.
+	// If nil, negative priorities fall back to DefaultPriorityBand.
+	DefaultNegativePriorityBand *PriorityBandConfig
+
 	// InitialShardCount specifies the number of parallel shards to create when the registry is initialized.
 	// This value must be greater than zero.
 	// Optional: Defaults to `defaultInitialShardCount` (1).
@@ -267,6 +273,15 @@ func WithPriorityBand(band *PriorityBandConfig) ConfigOption {
 func WithDefaultPriorityBand(band *PriorityBandConfig) ConfigOption {
 	return func(b *configBuilder) error {
 		b.config.DefaultPriorityBand = band
+		return nil
+	}
+}
+
+// WithDefaultNegativePriorityBand sets the template configuration used for dynamically provisioning priority bands
+// with priority levels strictly below zero.
+func WithDefaultNegativePriorityBand(band *PriorityBandConfig) ConfigOption {
+	return func(b *configBuilder) error {
+		b.config.DefaultNegativePriorityBand = band
 		return nil
 	}
 }
@@ -415,6 +430,14 @@ func NewConfigFromAPI(apiConfig *configapi.FlowControlConfig, handle plugin.Hand
 		opts = append(opts, WithDefaultPriorityBand(templateBand))
 	}
 
+	if apiConfig.DefaultNegativePriorityBand != nil {
+		templateBand, err := buildDefaultPriorityBandTemplate(handle, apiConfig.DefaultNegativePriorityBand)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, WithDefaultNegativePriorityBand(templateBand))
+	}
+
 	for _, band := range apiConfig.PriorityBands {
 		pb, err := buildPriorityBand(handle, band)
 		if err != nil {
@@ -529,6 +552,13 @@ func NewConfig(handle plugin.Handle, opts ...ConfigOption) (*Config, error) {
 		}
 	}
 
+	// Apply defaults to DefaultNegativePriorityBand if set.
+	if builder.config.DefaultNegativePriorityBand != nil {
+		if err := builder.config.DefaultNegativePriorityBand.applyDefaults(handle); err != nil {
+			return nil, fmt.Errorf("failed to apply defaults to DefaultNegativePriorityBand: %w", err)
+		}
+	}
+
 	// Apply defaults to all explicitly configured bands.
 	for _, band := range builder.config.PriorityBands {
 		if err := band.applyDefaults(handle); err != nil {
@@ -640,6 +670,14 @@ func (c *Config) validate(checker capabilityChecker) error {
 		return fmt.Errorf("invalid DefaultPriorityBand configuration: %w", err)
 	}
 
+	if c.DefaultNegativePriorityBand != nil {
+		negTemplateCopy := *c.DefaultNegativePriorityBand
+		negTemplateCopy.Priority = -1
+		if err := negTemplateCopy.validate(checker); err != nil {
+			return fmt.Errorf("invalid DefaultNegativePriorityBand configuration: %w", err)
+		}
+	}
+
 	// Validate statically configured bands.
 	for _, band := range c.PriorityBands {
 		if err := band.validate(checker); err != nil {
@@ -712,6 +750,11 @@ func (c *Config) Clone() *Config {
 	if c.DefaultPriorityBand != nil {
 		val := *c.DefaultPriorityBand
 		clone.DefaultPriorityBand = &val
+	}
+
+	if c.DefaultNegativePriorityBand != nil {
+		val := *c.DefaultNegativePriorityBand
+		clone.DefaultNegativePriorityBand = &val
 	}
 
 	if c.PriorityBands != nil {

@@ -188,6 +188,11 @@ func (in *FlowControlConfig) DeepCopyInto(out *FlowControlConfig) {
 		*out = new(PriorityBandConfig)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.DefaultNegativePriorityBand != nil {
+		in, out := &in.DefaultNegativePriorityBand, &out.DefaultNegativePriorityBand
+		*out = new(PriorityBandConfig)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.PriorityBands != nil {
 		in, out := &in.PriorityBands, &out.PriorityBands
 		*out = make([]PriorityBandConfig, len(*in))

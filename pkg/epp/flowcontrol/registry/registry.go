@@ -277,7 +277,11 @@ func (fr *FlowRegistry) ensurePriorityBand(priority int) error {
 
 	fr.logger.V(logging.DEFAULT).Info("Dynamically provisioning new priority band", "priority", priority)
 
-	newBand := *fr.config.DefaultPriorityBand
+	template := fr.config.DefaultPriorityBand
+	if priority < 0 && fr.config.DefaultNegativePriorityBand != nil {
+		template = fr.config.DefaultNegativePriorityBand
+	}
+	newBand := *template
 	newBand.Priority = priority
 	fr.config.PriorityBands[priority] = &newBand
 

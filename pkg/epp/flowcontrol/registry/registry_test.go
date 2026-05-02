@@ -433,6 +433,95 @@ func TestFlowRegistry_DynamicProvisioning(t *testing.T) {
 		require.NoError(t, err, "Existing flows should be auto-synced")
 		require.NotNil(t, mq)
 	})
+
+	t.Run("ShouldUseNegativeBandTemplate_WhenPriorityBelowZero", func(t *testing.T) {
+		t.Parallel()
+		handle := newTestPluginsHandle(t)
+
+		negativeMaxBytes := uint64(256)
+		cfg, err := NewConfig(handle,
+			WithInitialShardCount(1),
+			WithDefaultNegativePriorityBand(&PriorityBandConfig{
+				MaxBytes: negativeMaxBytes,
+			}),
+		)
+		require.NoError(t, err)
+
+		h := newRegistryTestHarness(t, harnessOptions{config: cfg})
+
+		negativePrio := -5
+		key := flowcontrol.FlowKey{ID: "negative-flow", Priority: negativePrio}
+
+		err = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
+			return nil
+		})
+		require.NoError(t, err, "WithConnection should succeed for negative priority")
+
+		h.fr.mu.RLock()
+		band, exists := h.fr.config.PriorityBands[negativePrio]
+		h.fr.mu.RUnlock()
+		require.True(t, exists, "Negative priority band should be dynamically provisioned")
+		assert.Equal(t, negativeMaxBytes, band.MaxBytes,
+			"Negative priority band should use DefaultNegativePriorityBand template")
+	})
+
+	t.Run("ShouldFallBackToDefaultBand_WhenNegativeTemplateIsNil", func(t *testing.T) {
+		t.Parallel()
+		handle := newTestPluginsHandle(t)
+
+		cfg, err := NewConfig(handle,
+			WithInitialShardCount(1),
+		)
+		require.NoError(t, err)
+
+		h := newRegistryTestHarness(t, harnessOptions{config: cfg})
+
+		negativePrio := -3
+		key := flowcontrol.FlowKey{ID: "fallback-flow", Priority: negativePrio}
+
+		err = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
+			return nil
+		})
+		require.NoError(t, err)
+
+		h.fr.mu.RLock()
+		band, exists := h.fr.config.PriorityBands[negativePrio]
+		h.fr.mu.RUnlock()
+		require.True(t, exists, "Negative priority band should still be provisioned")
+		assert.Equal(t, defaultPriorityBandMaxBytes, band.MaxBytes,
+			"Without negative template, should fall back to default band's MaxBytes")
+	})
+
+	t.Run("ShouldUseDefaultBand_WhenPositivePriorityWithNegativeTemplate", func(t *testing.T) {
+		t.Parallel()
+		handle := newTestPluginsHandle(t)
+
+		negativeMaxBytes := uint64(100)
+		cfg, err := NewConfig(handle,
+			WithInitialShardCount(1),
+			WithDefaultNegativePriorityBand(&PriorityBandConfig{
+				MaxBytes: negativeMaxBytes,
+			}),
+		)
+		require.NoError(t, err)
+
+		h := newRegistryTestHarness(t, harnessOptions{config: cfg})
+
+		positivePrio := 42
+		key := flowcontrol.FlowKey{ID: "positive-flow", Priority: positivePrio}
+
+		err = h.fr.WithConnection(key, func(conn contracts.ActiveFlowConnection) error {
+			return nil
+		})
+		require.NoError(t, err)
+
+		h.fr.mu.RLock()
+		band, exists := h.fr.config.PriorityBands[positivePrio]
+		h.fr.mu.RUnlock()
+		require.True(t, exists, "Positive priority band should be provisioned")
+		assert.Equal(t, defaultPriorityBandMaxBytes, band.MaxBytes,
+			"Positive priorities should use DefaultPriorityBand, not the negative template")
+	})
 }
 
 // --- Concurrency Tests ---

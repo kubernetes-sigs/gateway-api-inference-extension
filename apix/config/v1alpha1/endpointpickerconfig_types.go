@@ -319,6 +319,13 @@ type FlowControlConfig struct {
 	// priority levels. This template cascades to the standard `PriorityBandConfig` defaults.
 	DefaultPriorityBand *PriorityBandConfig `json:"defaultPriorityBand,omitempty"`
 
+	// +optional
+	// DefaultNegativePriorityBand allows you to define a separate template for priority levels
+	// strictly below zero. This enables designating negative-priority traffic as sheddable by
+	// setting lower capacity limits (e.g., maxBytes: "0" to drop immediately).
+	// If not specified, negative priorities fall back to DefaultPriorityBand.
+	DefaultNegativePriorityBand *PriorityBandConfig `json:"defaultNegativePriorityBand,omitempty"`
+
 	// PriorityBands allows you to explicitly define policies (like capacity limits) for specific
 	// priority levels. Traffic matching these priorities will be handled according to these rules.
 	// If a priority band is not specified, it uses specific defaults.
@@ -355,6 +362,10 @@ func (fcc *FlowControlConfig) String() string {
 
 	if fcc.DefaultPriorityBand != nil {
 		parts = append(parts, fmt.Sprintf("DefaultPriorityBand: %v", fcc.DefaultPriorityBand))
+	}
+
+	if fcc.DefaultNegativePriorityBand != nil {
+		parts = append(parts, fmt.Sprintf("DefaultNegativePriorityBand: %v", fcc.DefaultNegativePriorityBand))
 	}
 
 	if len(fcc.PriorityBands) > 0 {
