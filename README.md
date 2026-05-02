@@ -13,6 +13,15 @@ This is achieved by leveraging Envoy's [External Processing] (ext-proc) to exten
 ## New!
 Inference Gateway has partnered with vLLM to accelerate LLM serving optimizations with [llm-d](https://llm-d.ai/blog/llm-d-announce)!
 
+> [!IMPORTANT]
+> The Endpoint Picker (EPP), InferenceObjective and InferenceModelRewrite APIs, and Body Based Router (BBR) packages have moved to new repositories:
+> - EPP and associated APIs: [llm-d/llm-d-inference-scheduler](https://github.com/llm-d/llm-d-inference-scheduler)
+> - BBR: [llm-d/llm-d-inference-payload-processor](https://github.com/llm-d/llm-d-inference-payload-processor)
+>
+> No new code will be accepted to these packages in this repository, and they will be archived soon. This move was proposed and discussed in [issue #2430](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2430).
+>
+> This repository will continue to host the **lightweight EPP (LWEPP)** and the **InferencePool API**, and will remain the primary location for the development and maintenance of **conformance tests**.
+
 ## Concepts and Definitions
 
 The following specific terms to this project:
