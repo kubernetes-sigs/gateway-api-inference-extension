@@ -43,13 +43,14 @@ The BBR extracts the model name from the request body, does a lookup of the base
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/body-based-routing
       ```
 
-=== "Kgateway"
+=== "Agentgateway"
 
-    Kgateway does not require the Body-Based Routing Extension, and instead natively implements Body-Based Routing.
+    Agentgateway does not require the Body-Based Routing Extension, and instead natively implements Body-Based Routing.
     To use Body Based Routing, apply an `AgentgatewayPolicy`:
 
-    ```yaml
-    apiVersion: gateway.kgateway.dev/v1alpha1
+    ```bash
+    kubectl apply -f- <<EOF
+    apiVersion: agentgateway.dev/v1alpha1
     kind: AgentgatewayPolicy
     metadata:
       name: bbr
@@ -65,13 +66,8 @@ The BBR extracts the model name from the request body, does a lookup of the base
             set:
             - name: X-Gateway-Base-Model-Name
               value: |
-                {
-                  "Qwen/Qwen3-32B": "Qwen/Qwen3-32B",
-                  "food-review-1": "Qwen/Qwen3-32B",
-                  "deepseek/DeepSeek-r1": "deepseek/DeepSeek-r1",
-                  "ski-resorts": "deepseek/DeepSeek-r1",
-                  "movie-critique": "deepseek/DeepSeek-r1",
-                }[json(request.body).model]
+                {"Qwen/Qwen3-32B": "Qwen/Qwen3-32B", "food-review-1": "Qwen/Qwen3-32B", "deepseek/DeepSeek-r1": "deepseek/DeepSeek-r1", "ski-resorts": "deepseek/DeepSeek-r1", "movie-critique": "deepseek/DeepSeek-r1"}[string(json(request.body).model)]
+    EOF
     ```
 
 === "Other"
@@ -132,7 +128,7 @@ Set the Helm chart version (unless already set).
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```
 
-=== "Kgateway"
+=== "Agentgateway"
 
     ```bash
     export GATEWAY_PROVIDER=none
@@ -141,7 +137,7 @@ Set the Helm chart version (unless already set).
     --set inferencePool.modelServers.matchLabels.app=vllm-deepseek-r1 \
     --set provider.name=$GATEWAY_PROVIDER \
     --set experimentalHttpRoute.enabled=true \
-    --set experimentalHttpRoute.baseModel=deepseek/vllm-deepseek-r1 \
+    --set experimentalHttpRoute.baseModel=deepseek/DeepSeek-r1 \
     --version $IGW_CHART_VERSION \
     oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
     ```
@@ -153,7 +149,7 @@ Set the Helm chart version (unless already set).
       --dependency-update \
       --set inferencePool.modelServers.matchLabels.app=vllm-deepseek-r1 \
       --set experimentalHttpRoute.enabled=true \
-      --set experimentalHttpRoute.baseModel=deepseek/vllm-deepseek-r1 \
+      --set experimentalHttpRoute.baseModel=deepseek/DeepSeek-r1 \
       --version $IGW_CHART_VERSION \
       oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
       ```
@@ -204,7 +200,7 @@ Run `helm upgrade` in order to update in place the HttpRoute mapping of the firs
       --version $IGW_CHART_VERSION
       ```
 
-=== "Kgateway"
+=== "Agentgateway"
 
       ```bash
       export GATEWAY_PROVIDER=none
