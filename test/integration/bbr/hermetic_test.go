@@ -26,14 +26,11 @@ import (
 	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
-	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/testing/protocmp"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/bodyfieldtoheader"
-	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	epp "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
@@ -92,11 +89,7 @@ func TestBodyBasedRouting(t *testing.T) {
 				return
 			}
 
-			envoytest.SortSetHeadersInResponses([]*extProcPb.ProcessingResponse{tc.wantResponse})
-			envoytest.SortSetHeadersInResponses([]*extProcPb.ProcessingResponse{res})
-			if diff := cmp.Diff(tc.wantResponse, res, protocmp.Transform()); diff != "" {
-				t.Errorf("Response mismatch (-want +got): %v", diff)
-			}
+			integration.RequireProcessingResponseEqual(t, tc.wantResponse, res)
 		})
 	}
 }
@@ -196,11 +189,7 @@ func TestResponsePlugins(t *testing.T) {
 			require.NoError(t, err, "unexpected error during streamed request")
 			require.Len(t, responses, len(tc.wantResponses))
 
-			envoytest.SortSetHeadersInResponses(tc.wantResponses)
-			envoytest.SortSetHeadersInResponses(responses)
-			if diff := cmp.Diff(tc.wantResponses, responses, protocmp.Transform()); diff != "" {
-				t.Errorf("Response mismatch (-want +got): %v", diff)
-			}
+			integration.RequireProcessingResponsesEqual(t, tc.wantResponses, responses)
 		})
 	}
 }
@@ -298,12 +287,7 @@ func TestFullDuplexStreamed_BodyBasedRouting(t *testing.T) {
 				return
 			}
 
-			// sort headers in responses for deterministic tests
-			envoytest.SortSetHeadersInResponses(tc.wantResponses)
-			envoytest.SortSetHeadersInResponses(responses)
-			if diff := cmp.Diff(tc.wantResponses, responses, protocmp.Transform()); diff != "" {
-				t.Errorf("Response mismatch (-want +got): %v", diff)
-			}
+			integration.RequireProcessingResponsesEqual(t, tc.wantResponses, responses)
 		})
 	}
 }

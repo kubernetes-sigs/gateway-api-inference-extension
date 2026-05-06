@@ -38,14 +38,16 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 	"google.golang.org/protobuf/types/known/structpb"
-	pb "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/vllmgrpc/api/gen"
 
 	reqcommon "sigs.k8s.io/gateway-api-inference-extension/pkg/common/request"
+	pb "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requesthandling/parsers/vllmgrpc/api/gen"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/metadata"
 )
 
@@ -452,6 +454,31 @@ func NewImmediateErrorResponse(code envoyTypePb.StatusCode, body string) []*extP
 			},
 		},
 	}}
+}
+
+func processingResponseCmpOptions() []cmp.Option {
+	return []cmp.Option{
+		protocmp.Transform(),
+		protocmp.SortRepeated(func(a, b *envoyCorev3.HeaderValueOption) bool {
+			return a.GetHeader().GetKey() < b.GetHeader().GetKey()
+		}),
+	}
+}
+
+// RequireProcessingResponseEqual compares a single ext_proc response with stable protobuf sorting.
+func RequireProcessingResponseEqual(t *testing.T, want, got *extProcPb.ProcessingResponse) {
+	t.Helper()
+	if diff := cmp.Diff(want, got, processingResponseCmpOptions()...); diff != "" {
+		t.Errorf("Response mismatch (-want +got): %v", diff)
+	}
+}
+
+// RequireProcessingResponsesEqual compares a sequence of ext_proc responses with stable protobuf sorting.
+func RequireProcessingResponsesEqual(t *testing.T, want, got []*extProcPb.ProcessingResponse) {
+	t.Helper()
+	if diff := cmp.Diff(want, got, processingResponseCmpOptions()...); diff != "" {
+		t.Errorf("Response mismatch (-want +got): %v", diff)
+	}
 }
 
 // --- Execution Helpers ---

@@ -24,13 +24,10 @@ import (
 
 	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
-	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/testing/protocmp"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/framework"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/bbr/plugins/basemodelextractor"
-	envoytest "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy/test"
 	epp "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/interface/plugin"
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
@@ -106,11 +103,7 @@ func TestBodyMutation_Unary(t *testing.T) {
 		},
 	}
 
-	envoytest.SortSetHeadersInResponses([]*extProcPb.ProcessingResponse{want})
-	envoytest.SortSetHeadersInResponses([]*extProcPb.ProcessingResponse{resp})
-	if diff := cmp.Diff(want, resp, protocmp.Transform()); diff != "" {
-		t.Errorf("Response mismatch (-want +got): %v", diff)
-	}
+	integration.RequireProcessingResponseEqual(t, want, resp)
 }
 
 // TestBodyMutation_Streaming verifies the streaming path: when a plugin mutates the body,
@@ -193,9 +186,5 @@ func TestBodyMutation_Streaming(t *testing.T) {
 	responses, err := integration.StreamedRequest(t, h.Client, reqs, len(wantResponses))
 	require.NoError(t, err, "unexpected stream error")
 
-	envoytest.SortSetHeadersInResponses(wantResponses)
-	envoytest.SortSetHeadersInResponses(responses)
-	if diff := cmp.Diff(wantResponses, responses, protocmp.Transform()); diff != "" {
-		t.Errorf("Response mismatch (-want +got): %v", diff)
-	}
+	integration.RequireProcessingResponsesEqual(t, wantResponses, responses)
 }

@@ -20,10 +20,7 @@ import (
 	"context"
 	"testing"
 
-	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
-	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/testing/protocmp"
 
 	"sigs.k8s.io/gateway-api-inference-extension/test/integration"
 )
@@ -49,14 +46,7 @@ func TestFullDuplexStreamed_DataLayer(t *testing.T) {
 			responses, err := integration.StreamedRequest(t, h.Client, tc.requests, len(tc.wantResponses))
 			require.NoError(t, err)
 
-			if diff := cmp.Diff(tc.wantResponses, responses,
-				protocmp.Transform(),
-				protocmp.SortRepeated(func(a, b *configPb.HeaderValueOption) bool {
-					return a.GetHeader().GetKey() < b.GetHeader().GetKey()
-				}),
-			); diff != "" {
-				t.Errorf("Response mismatch (-want +got): %v", diff)
-			}
+			integration.RequireProcessingResponsesEqual(t, tc.wantResponses, responses)
 
 			if len(tc.wantMetrics) > 0 {
 				h.ExpectMetrics(tc.wantMetrics)
