@@ -59,8 +59,18 @@ inferenceExtension:
     limits:
       memory: 16Gi
 
+  # Sidecar configuration for EPP
   sidecar:
     enabled: true
+
+    # Resource requests and limits for the Envoy sidecar.
+    resources:
+      requests:
+        cpu: "4"
+        memory: 8Gi
+      limits:
+        memory: 16Gi
+
     configMap:
       name: envoy
       # Because the template just dumps this section, the keys become filenames.
@@ -293,10 +303,6 @@ inferenceExtension:
         name: http-8081
       - containerPort: 19001
         name: metrics-19001
-    resources:
-      requests:
-        cpu: 100m
-        memory: 512Mi
 
     readinessProbe:
       failureThreshold: 1
