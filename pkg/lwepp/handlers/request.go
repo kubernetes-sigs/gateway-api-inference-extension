@@ -36,6 +36,12 @@ func (s *StreamingServer) handleRequestHeaders(ctx context.Context, reqCtx *Requ
 	req *extProcPb.ProcessingRequest_RequestHeaders) error {
 	logger := log.FromContext(ctx)
 
+	// Store headers in RequestContext.
+	reqCtx.Headers = make(map[string]string)
+	for _, header := range req.RequestHeaders.Headers.Headers {
+		reqCtx.Headers[header.Key] = envoy.GetHeaderValue(header)
+	}
+
 	var metadataEndpoints []string
 
 	// Read endpoint subset from filter metadata per the EPP protocol.
@@ -43,10 +49,23 @@ func (s *StreamingServer) handleRequestHeaders(ctx context.Context, reqCtx *Requ
 	// to constrain which endpoints the EPP may pick from.
 	requestMetadata := envoy.ExtractMetadataValues(fullReq)
 	if subsetMap, ok := requestMetadata[metadata.SubsetFilterNamespace].(map[string]any); ok {
-		if endpointList, ok := subsetMap[metadata.SubsetFilterKey].([]any); ok {
-			for _, ep := range endpointList {
-				if epStr, ok := ep.(string); ok {
-					metadataEndpoints = append(metadataEndpoints, epStr)
+		if val, ok := subsetMap[metadata.SubsetFilterKey]; ok {
+			switch v := val.(type) {
+			case string:
+				for _, ep := range strings.Split(v, ",") {
+					if trimmed := strings.TrimSpace(ep); trimmed != "" {
+						metadataEndpoints = append(metadataEndpoints, trimmed)
+					}
+				}
+			case []any:
+				for _, ep := range v {
+					if epStr, ok := ep.(string); ok {
+						for _, subEp := range strings.Split(epStr, ",") {
+							if trimmed := strings.TrimSpace(subEp); trimmed != "" {
+								metadataEndpoints = append(metadataEndpoints, trimmed)
+							}
+						}
+					}
 				}
 			}
 		}
@@ -102,8 +121,19 @@ func (s *StreamingServer) handleRequestHeaders(ctx context.Context, reqCtx *Requ
 		candidates = allPods
 	}
 
-	// For the lightweight implementation (Round Robin), no request context is required.
-	res, err := s.picker.Pick(ctx, &PickRequest{}, candidates)
+	reqCtx.Candidates = candidates
+	return nil
+}
+
+func (s *StreamingServer) pickEndpoint(ctx context.Context, reqCtx *RequestContext, body []byte) error {
+	logger := log.FromContext(ctx)
+
+	pickReq := &PickRequest{
+		Headers: reqCtx.Headers,
+		Body:    body,
+	}
+
+	res, err := s.picker.Pick(ctx, pickReq, reqCtx.Candidates)
 	if err != nil {
 		return err
 	}
@@ -116,6 +146,5 @@ func (s *StreamingServer) handleRequestHeaders(ctx context.Context, reqCtx *Requ
 	}
 
 	logger.V(4).Info("Selected endpoint", "podIP", reqCtx.SelectedPodIP, "endpoint", reqCtx.TargetEndpoint)
-
 	return nil
 }

@@ -65,10 +65,14 @@ func TestHandleRequestHeaders_RoundRobin(t *testing.T) {
 	reqCtx1 := &RequestContext{}
 	err := server.handleRequestHeaders(context.Background(), reqCtx1, nil, req)
 	assert.NoError(t, err)
+	err = server.pickEndpoint(context.Background(), reqCtx1, nil)
+	assert.NoError(t, err)
 
 	// Second request
 	reqCtx2 := &RequestContext{}
 	err = server.handleRequestHeaders(context.Background(), reqCtx2, nil, req)
+	assert.NoError(t, err)
+	err = server.pickEndpoint(context.Background(), reqCtx2, nil)
 	assert.NoError(t, err)
 
 	// They should be different pods (round-robin)
@@ -77,6 +81,8 @@ func TestHandleRequestHeaders_RoundRobin(t *testing.T) {
 	// Third request should wrap around
 	reqCtx3 := &RequestContext{}
 	err = server.handleRequestHeaders(context.Background(), reqCtx3, nil, req)
+	assert.NoError(t, err)
+	err = server.pickEndpoint(context.Background(), reqCtx3, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, reqCtx1.SelectedPodIP, reqCtx3.SelectedPodIP)
 }
@@ -102,6 +108,8 @@ func TestHandleRequestHeaders_FilteringViaHeader(t *testing.T) {
 
 	reqCtx := &RequestContext{}
 	err := server.handleRequestHeaders(context.Background(), reqCtx, nil, req)
+	assert.NoError(t, err)
+	err = server.pickEndpoint(context.Background(), reqCtx, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "10.0.0.2", reqCtx.SelectedPodIP)
 }
@@ -154,7 +162,44 @@ func TestHandleRequestHeaders_FilteringViaFilterMetadata(t *testing.T) {
 	reqCtx := &RequestContext{}
 	err := server.handleRequestHeaders(context.Background(), reqCtx, fullReq, req)
 	assert.NoError(t, err)
+	err = server.pickEndpoint(context.Background(), reqCtx, nil)
+	assert.NoError(t, err)
 	assert.Equal(t, "10.0.0.3", reqCtx.SelectedPodIP)
+}
+
+func TestHandleRequestHeaders_FilteringViaFilterMetadata_StringValue(t *testing.T) {
+	pods := []*datastore.Endpoint{
+		{Address: "10.0.0.1", Port: "8080"},
+		{Address: "10.0.0.2", Port: "8080"},
+		{Address: "10.0.0.3", Port: "8080"},
+	}
+	ds := &mockDatastore{pods: pods}
+	server := NewStreamingServer(ds)
+
+	fullReq := &extProcPb.ProcessingRequest{
+		MetadataContext: &envoyCorev3.Metadata{
+			FilterMetadata: map[string]*structpb.Struct{
+				metadata.SubsetFilterNamespace: {
+					Fields: map[string]*structpb.Value{
+						metadata.SubsetFilterKey: structpb.NewStringValue("10.0.0.2:8080,10.0.0.3:8080"),
+					},
+				},
+			},
+		},
+	}
+	req := &extProcPb.ProcessingRequest_RequestHeaders{
+		RequestHeaders: &extProcPb.HttpHeaders{
+			Headers: &envoyCorev3.HeaderMap{},
+		},
+	}
+
+	reqCtx := &RequestContext{}
+	err := server.handleRequestHeaders(context.Background(), reqCtx, fullReq, req)
+	assert.NoError(t, err)
+
+	// Candidates resolved should contain only 10.0.0.2 and 10.0.0.3
+	assert.Len(t, reqCtx.Candidates, 2)
+	assert.ElementsMatch(t, []string{"10.0.0.2", "10.0.0.3"}, []string{reqCtx.Candidates[0].Address, reqCtx.Candidates[1].Address})
 }
 
 func TestHandleRequestHeaders_HeaderTakesPrecedenceOverMetadata(t *testing.T) {
@@ -193,6 +238,8 @@ func TestHandleRequestHeaders_HeaderTakesPrecedenceOverMetadata(t *testing.T) {
 
 	reqCtx := &RequestContext{}
 	err := server.handleRequestHeaders(context.Background(), reqCtx, fullReq, req)
+	assert.NoError(t, err)
+	err = server.pickEndpoint(context.Background(), reqCtx, nil)
 	assert.NoError(t, err)
 	// The test header should override metadata-based filtering.
 	assert.Equal(t, "10.0.0.2", reqCtx.SelectedPodIP)
