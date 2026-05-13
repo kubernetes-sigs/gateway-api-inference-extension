@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -158,6 +159,8 @@ type recvResult struct {
 	req *extProcPb.ProcessingRequest
 	err error
 }
+
+const maxRequestBodyPreallocBytes = 1 << 20
 
 func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	ctx := srv.Context()
@@ -302,6 +305,11 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			ctx = log.IntoContext(ctx, logger)
 
 			err = s.HandleRequestHeaders(ctx, reqCtx, v)
+			if err == nil && !v.RequestHeaders.EndOfStream {
+				if capacity := requestBodyCapacity(v); capacity > 0 {
+					body = make([]byte, 0, capacity)
+				}
+			}
 		case *extProcPb.ProcessingRequest_RequestBody:
 			loggerTrace.Info("Incoming body chunk", "EoS", v.RequestBody.EndOfStream)
 			// In the stream case, we can receive multiple request bodies.
@@ -417,6 +425,18 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			return err
 		}
 	}
+}
+
+func requestBodyCapacity(req *extProcPb.ProcessingRequest_RequestHeaders) int {
+	contentLength := envoy.ExtractHeaderValue(req, "content-length")
+	if contentLength == "" {
+		return 0
+	}
+	bodyLength, err := strconv.Atoi(contentLength)
+	if err != nil || bodyLength <= 0 || bodyLength > maxRequestBodyPreallocBytes {
+		return 0
+	}
+	return bodyLength
 }
 
 // finishResponse ensures all post-response logic, such as metric recording
