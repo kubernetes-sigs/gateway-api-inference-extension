@@ -96,7 +96,7 @@ func (p *OpenAIParser) ParseRequest(ctx context.Context, body []byte, headers ma
 	if err := json.Unmarshal(body, &bodyMap); err != nil {
 		return nil, fmt.Errorf("error unmarshaling request bodyMap: %w", err)
 	}
-	extractedBody, err := extractRequestBody(body, headers)
+	extractedBody, err := extractRequestBody(body, bodyMap, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -187,8 +187,9 @@ func determineAPITypeFromPath(path string) string {
 	return completionsAPI
 }
 
-// extractRequestBody extracts the LLMRequestBody from the given request body map using path-based detection.
-func extractRequestBody(rawBody []byte, headers map[string]string) (*fwkrh.InferenceRequestBody, error) {
+// extractRequestBody builds the typed request body for the API path.
+// It reuses bodyMap for completions to avoid decoding large prompts twice.
+func extractRequestBody(rawBody []byte, bodyMap map[string]any, headers map[string]string) (*fwkrh.InferenceRequestBody, error) {
 	// Determine API type from request path
 	path := getRequestPath(headers)
 	apiType := determineAPITypeFromPath(path)
@@ -218,11 +219,11 @@ func extractRequestBody(rawBody []byte, headers map[string]string) (*fwkrh.Infer
 		return nil, errors.New("invalid chat completions request: must have valid messages field")
 
 	case completionsAPI:
-		var completions fwkrh.CompletionsRequest
-		if err := json.Unmarshal(rawBody, &completions); err == nil && !completions.Prompt.IsEmpty() {
-			return &fwkrh.InferenceRequestBody{Completions: &completions}, nil
+		completions, err := completionsFromMap(bodyMap)
+		if err != nil {
+			return nil, err
 		}
-		return nil, errors.New("invalid completions request: must have prompt field")
+		return &fwkrh.InferenceRequestBody{Completions: completions}, nil
 
 	case embeddingsAPI:
 		var embeddings fwkrh.EmbeddingsRequest
@@ -232,6 +233,75 @@ func extractRequestBody(rawBody []byte, headers map[string]string) (*fwkrh.Infer
 		return nil, errors.New("invalid embeddings request: must have input field")
 	default:
 		return nil, errors.New("unsupported API endpoint")
+	}
+}
+
+// completionsFromMap mirrors CompletionsRequest JSON decoding from bodyMap.
+// Keep this in sync with CompletionsRequest if it starts parsing more fields.
+func completionsFromMap(bodyMap map[string]any) (*fwkrh.CompletionsRequest, error) {
+	var c fwkrh.CompletionsRequest
+	prompt, err := completionsPromptFromMapValue(bodyMap["prompt"])
+	if err != nil {
+		return nil, err
+	}
+	c.Prompt = prompt
+
+	if v, ok := bodyMap["cache_salt"]; ok && v != nil {
+		s, ok := v.(string)
+		if !ok {
+			return nil, errors.New("invalid completions request: cache_salt must be a string")
+		}
+		c.CacheSalt = s
+	}
+	if c.Prompt.IsEmpty() {
+		return nil, errors.New("invalid completions request: must have prompt field")
+	}
+	return &c, nil
+}
+
+func completionsPromptFromMapValue(v any) (fwkrh.Prompt, error) {
+	switch p := v.(type) {
+	case nil:
+		return fwkrh.Prompt{}, nil
+	case string:
+		return fwkrh.Prompt{Raw: p}, nil
+	case []any:
+		return completionsPromptFromArray(p)
+	default:
+		return fwkrh.Prompt{}, errors.New("invalid completions request: prompt must be a string or an array")
+	}
+}
+
+func completionsPromptFromArray(v []any) (fwkrh.Prompt, error) {
+	if len(v) == 0 {
+		return fwkrh.Prompt{}, nil
+	}
+	switch v[0].(type) {
+	case string:
+		strings := make([]string, len(v))
+		for i, val := range v {
+			str, ok := val.(string)
+			if !ok {
+				return fwkrh.Prompt{}, errors.New("prompt: mixed types in array")
+			}
+			strings[i] = str
+		}
+		return fwkrh.Prompt{Strings: strings}, nil
+	case float64:
+		tokenIDs := make([]uint32, len(v))
+		for i, val := range v {
+			flt, ok := val.(float64)
+			if !ok {
+				return fwkrh.Prompt{}, errors.New("prompt: mixed types in array")
+			}
+			if flt != float64(uint32(flt)) {
+				return fwkrh.Prompt{}, fmt.Errorf("prompt: floating-point number %f is not a valid token ID", flt)
+			}
+			tokenIDs[i] = uint32(flt)
+		}
+		return fwkrh.Prompt{TokenIDs: tokenIDs}, nil
+	default:
+		return fwkrh.Prompt{}, errors.New("prompt: unsupported array element type")
 	}
 }
 

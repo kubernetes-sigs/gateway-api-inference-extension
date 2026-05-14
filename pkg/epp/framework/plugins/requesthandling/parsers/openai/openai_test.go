@@ -19,6 +19,7 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -125,6 +126,34 @@ func TestOpenAIParser_ParseRequest(t *testing.T) {
 			body: map[string]any{
 				"model":  "test",
 				"prompt": []any{},
+			},
+			wantErr: true,
+		},
+		{
+			name:    "completions request with null prompt rejected",
+			headers: map[string]string{":path": "/v1/completions"},
+			body: map[string]any{
+				"model":  "test",
+				"prompt": nil,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "completions request with non-string non-array prompt rejected",
+			headers: map[string]string{":path": "/v1/completions"},
+			body: map[string]any{
+				"model":  "test",
+				"prompt": 42,
+			},
+			wantErr: true,
+		},
+		{
+			name:    "completions request with non-string cache_salt rejected",
+			headers: map[string]string{":path": "/v1/completions"},
+			body: map[string]any{
+				"model":      "test",
+				"prompt":     "valid prompt",
+				"cache_salt": 123,
 			},
 			wantErr: true,
 		},
@@ -1103,7 +1132,11 @@ func BenchmarkExtractRequestData_ChatCompletionsWithOptionals(b *testing.B) {
 		if err != nil {
 			b.Errorf("body cannot be marshalled to JSON bytes")
 		}
-		_, err = extractRequestBody(jsonBytes, headers)
+		bodyMap := make(map[string]any)
+		if err := json.Unmarshal(jsonBytes, &bodyMap); err != nil {
+			b.Fatal(err)
+		}
+		_, err = extractRequestBody(jsonBytes, bodyMap, headers)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1171,6 +1204,31 @@ func BenchmarkExtractRequestData_Embeddings(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_, err = parser.ParseRequest(context.Background(), jsonBytes, headers)
 		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkParseRequest_LargeCompletions measures a completions request with a
+// large prompt.
+func BenchmarkParseRequest_LargeCompletions(b *testing.B) {
+	prompt := strings.Repeat("a", 220*1024)
+	body := map[string]any{
+		"model":  "test",
+		"prompt": prompt,
+		"stream": true,
+	}
+	jsonBytes, err := json.Marshal(body)
+	if err != nil {
+		b.Fatalf("body cannot be marshalled to JSON bytes: %v", err)
+	}
+	headers := map[string]string{":path": "/v1/completions"}
+	parser := NewOpenAIParser()
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		if _, err := parser.ParseRequest(context.Background(), jsonBytes, headers); err != nil {
 			b.Fatal(err)
 		}
 	}
