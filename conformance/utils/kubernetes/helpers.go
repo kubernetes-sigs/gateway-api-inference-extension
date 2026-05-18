@@ -43,29 +43,33 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
 )
 
-// checkCondition is a helper function similar to findConditionInList or CheckCondition
+// checkConditions is a helper function similar to findConditionInList or CheckCondition
 // from the Gateway API conformance utilities.
-// It checks if the expectedCondition is present in the conditions list.
+// It checks if one of the expectedConditions is present in the conditions list.
 // If expectedCondition.Reason is an empty string, it matches any reason.
-func checkCondition(t *testing.T, conditions []metav1.Condition, expectedCondition metav1.Condition) bool {
+// Apart from a boolean value, if a match is found, checkConditions returns
+// a pointer to the matched condition.
+func checkConditions(t *testing.T, conditions []metav1.Condition, expectedConditions []metav1.Condition) (bool, *metav1.Condition) {
 	t.Helper()
-	for _, cond := range conditions {
-		if cond.Type == expectedCondition.Type {
-			if cond.Status == expectedCondition.Status {
-				if expectedCondition.Reason == "" || cond.Reason == expectedCondition.Reason {
-					return true
+	for _, expectedCondition := range expectedConditions {
+		for _, cond := range conditions {
+			if cond.Type == expectedCondition.Type {
+				if cond.Status == expectedCondition.Status {
+					if expectedCondition.Reason == "" || cond.Reason == expectedCondition.Reason {
+						return true, &expectedCondition
+					}
+					t.Logf("Condition %s found with Status %s, but Reason %s did not match expected %s",
+						expectedCondition.Type, cond.Status, cond.Reason, expectedCondition.Reason)
+				} else {
+					t.Logf("Condition %s found, but Status %s did not match expected %s",
+						expectedCondition.Type, cond.Status, expectedCondition.Status)
 				}
-				t.Logf("Condition %s found with Status %s, but Reason %s did not match expected %s",
-					expectedCondition.Type, cond.Status, cond.Reason, expectedCondition.Reason)
-			} else {
-				t.Logf("Condition %s found, but Status %s did not match expected %s",
-					expectedCondition.Type, cond.Status, expectedCondition.Status)
 			}
 		}
+		t.Logf("Condition %s with Status %s (and Reason %s if specified) not found in conditions list: %+v",
+			expectedCondition.Type, expectedCondition.Status, expectedCondition.Reason, conditions)
 	}
-	t.Logf("Condition %s with Status %s (and Reason %s if specified) not found in conditions list: %+v",
-		expectedCondition.Type, expectedCondition.Status, expectedCondition.Reason, conditions)
-	return false
+	return false, nil
 }
 
 // InferencePoolMustHaveCondition waits for the specified InferencePool resource
@@ -73,11 +77,20 @@ func checkCondition(t *testing.T, conditions []metav1.Condition, expectedConditi
 // It polls the InferencePool's status until the condition is met or the timeout occurs.
 func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.NamespacedName, gateway types.NamespacedName, expectedCondition metav1.Condition) {
 	t.Helper() // Marks this function as a test helper
+	InferencePoolMustHaveOneOfConditions(t, c, poolNN, gateway, []metav1.Condition{expectedCondition})
+}
+
+// InferencePoolMustHaveCondition waits for the specified InferencePool resource
+// to exist and report one of the expected status conditions within one of its parent statuses.
+// It polls the InferencePool's status until one of the conditions is met or the timeout occurs.
+func InferencePoolMustHaveOneOfConditions(t *testing.T, c client.Reader, poolNN types.NamespacedName, gateway types.NamespacedName, expectedConditions []metav1.Condition) {
+	t.Helper() // Marks this function as a test helper
 
 	var timeoutConfig = config.DefaultInferenceExtensionTimeoutConfig()
 	var lastObservedPool *inferenceapi.InferencePool
 	var lastError error
 	var conditionFound bool
+	var matchedExpectedCondition metav1.Condition
 
 	waitErr := wait.PollUntilContextTimeout(
 		context.Background(),
@@ -109,8 +122,9 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.
 				if parentStatus.ParentRef.Namespace != "" &&
 					string(parentStatus.ParentRef.Namespace) == gateway.Namespace &&
 					string(parentStatus.ParentRef.Name) == gateway.Name {
-					if checkCondition(t, parentStatus.Conditions, expectedCondition) {
+					if ok, matched := checkConditions(t, parentStatus.Conditions, expectedConditions); ok {
 						conditionFound = true
+						matchedExpectedCondition = *matched
 						return true, nil
 					}
 				}
@@ -151,19 +165,24 @@ func InferencePoolMustHaveCondition(t *testing.T, c client.Reader, poolNN types.
 			debugMsg += "\nInferencePool was not found or not observed successfully during polling."
 		}
 
-		finalMsg := fmt.Sprintf("timed out or condition not met for InferencePool %s to have condition Type=%s, Status=%s",
-			poolNN.String(), expectedCondition.Type, expectedCondition.Status)
-		if expectedCondition.Reason != "" {
-			finalMsg += fmt.Sprintf(", Reason='%s'", expectedCondition.Reason)
+		var conditionStrings []string
+		for _, cond := range expectedConditions {
+			str := fmt.Sprintf("Type=%s, Status=%s", cond.Type, cond.Status)
+			if cond.Reason != "" {
+				str += fmt.Sprintf(", Reason='%s'", cond.Reason)
+			}
+			str = fmt.Sprintf("{%s}", str)
 		}
+		finalMsg := fmt.Sprintf("timed out or condition not met for InferencePool %s to have one of conditions {%s}",
+			poolNN.String(), strings.Join(conditionStrings, ", "))
 		finalMsg += "." + debugMsg
 		require.FailNow(t, finalMsg)
 	}
 
 	logMsg := fmt.Sprintf("InferencePool %s successfully has condition Type=%s, Status=%s",
-		poolNN.String(), expectedCondition.Type, expectedCondition.Status)
-	if expectedCondition.Reason != "" {
-		logMsg += fmt.Sprintf(", Reason='%s'", expectedCondition.Reason)
+		poolNN.String(), matchedExpectedCondition.Type, matchedExpectedCondition.Status)
+	if matchedExpectedCondition.Reason != "" {
+		logMsg += fmt.Sprintf(", Reason='%s'", matchedExpectedCondition.Reason)
 	}
 	t.Log(logMsg)
 }
