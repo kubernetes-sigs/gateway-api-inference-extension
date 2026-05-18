@@ -307,6 +307,17 @@ const (
 	// has been rejected by the Parent. The user should inspect the status of the
 	// referring HTTPRoute for the specific reason.
 	InferencePoolReasonHTTPRouteNotAccepted InferencePoolReason = "HTTPRouteNotAccepted"
+
+	// InferencePoolReasonEndpointPickerRefMissing is the reason used when the
+	// the "Accepted" condition is false because the endpointPickerRef field
+	// is unset despite being required by the Inference Gateway implementation.
+	// Until Gateway API Inference Extension release v1.5.0, the endpointPickerRef
+	// field on InferencePool was required. While it is currently optional at the API
+	// level, it is still required by most implementations.
+	// For implementations supporting omitting endpointPickerRef, the condition message
+	// may contain implemantation-specific instructions how to configure load balancing
+	// without endpointPickerRef.
+	InferencePoolReasonEndpointPickerRefMissing InferencePoolReason = "EndpointPickerRefMissing"
 )
 
 const (
