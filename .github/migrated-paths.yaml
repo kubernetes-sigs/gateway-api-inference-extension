@@ -1,0 +1,14 @@
+# Path prefixes for code that moved to llm-d
+
+prefixes:
+  - cmd/epp/
+  - pkg/epp/
+  - cmd/bbr/
+  - pkg/bbr/
+
+repositories:
+  epp: https://github.com/llm-d/llm-d-inference-scheduler
+  bbr: https://github.com/llm-d/llm-d-inference-payload-processor
+
+comment_marker: "<!-- llm-d-migration-notice-v1 -->"
+migration_issue: https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2430
