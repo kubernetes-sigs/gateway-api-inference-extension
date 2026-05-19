@@ -248,6 +248,9 @@ You should see output listing the inference-related CRDs.
 
     **Important Drawback**: Because the passthrough parser does not parse the payload, features that rely on payload parsing (such as the `prefix-cache-scorer`) cannot be used.
 
+??? note "Endpoint Picker becomes optional"
+    Until release `v1.5.0`, the field `endpointPickerRef` on Inference Pool resource was required, which is why the above Helm chart deploys both Endpoint Picker and Inference Pool together. To allow Inference Gateway implementations to support Inference Pools without user-managed Endpoint Picker deployments, the field is currently optional. Consult the documentation of your Inference Gateway implementation to check if supports such a mode.
+
 ### Verify HttpRoute and InferencePool Status
 
 --8<-- "site-src/_includes/verify-status-latest.md"
