@@ -21,6 +21,13 @@ This project has several implementations that are planned or in progress:
 
 Agentgateway supports both standalone and Kubernetes deployment modes.
 
+Gateway conformance status is governed by the
+[Conformance Report Deprecation Policy](../concepts/conformance.md#conformance-report-deprecation-policy).
+Implementations that have not submitted a successful Gateway profile report for
+the current minor release or either of the two previous minor releases may be
+removed from conformant implementation listings until they submit an accepted
+report.
+
 ## Alibaba Cloud Container Service for Kubernetes
 
 [Alibaba Cloud Container Service for Kubernetes (ACK)][ack] is a managed Kubernetes platform 
