@@ -57,6 +57,8 @@ type StreamingServer struct {
 type RequestContext struct {
 	TargetEndpoint string
 	SelectedPodIP  string
+	Candidates     []*datastore.Endpoint
+	Headers        map[string]string
 }
 
 // PickRequest contains metadata from the incoming request to guide endpoint selection.
@@ -105,6 +107,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	logger.Info("Processing new stream")
 
 	reqCtx := &RequestContext{}
+	var body []byte
+	var err error
 
 	for {
 		select {
@@ -124,59 +128,125 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		switch v := req.Request.(type) {
 		case *extProcPb.ProcessingRequest_RequestHeaders:
 			logger.Info("Received request headers")
-			err := s.handleRequestHeaders(ctx, reqCtx, req, v)
+			err = s.handleRequestHeaders(ctx, reqCtx, req, v)
 			if err != nil {
 				logger.Error(err, "Failed to handle request headers")
 				return status.Errorf(codes.Internal, "internal error: %v", err)
 			}
 
-			resp := &extProcPb.ProcessingResponse{
-				Response: &extProcPb.ProcessingResponse_RequestHeaders{
-					RequestHeaders: &extProcPb.HeadersResponse{
-						Response: &extProcPb.CommonResponse{
-							ClearRouteCache: true,
-							HeaderMutation: &extProcPb.HeaderMutation{
-								SetHeaders: []*configPb.HeaderValueOption{
-									{
-										Header: &configPb.HeaderValue{
-											Key:      metadata.DestinationEndpointKey,
-											RawValue: []byte(reqCtx.TargetEndpoint),
+			var resp *extProcPb.ProcessingResponse
+			if v.RequestHeaders.EndOfStream {
+				err = s.pickEndpoint(ctx, reqCtx, nil)
+				if err != nil {
+					logger.Error(err, "Failed to pick endpoint")
+					return status.Errorf(codes.Internal, "internal error: %v", err)
+				}
+
+				resp = &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*configPb.HeaderValueOption{
+										{
+											Header: &configPb.HeaderValue{
+												Key:      metadata.DestinationEndpointKey,
+												RawValue: []byte(reqCtx.TargetEndpoint),
+											},
 										},
-									},
-									{
-										Header: &configPb.HeaderValue{
-											Key:      "X-Echo-Set-Header",
-											RawValue: []byte(metadata.ConformanceTestResultHeader + ":" + reqCtx.TargetEndpoint),
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "X-Echo-Set-Header",
+												RawValue: []byte(metadata.ConformanceTestResultHeader + ":" + reqCtx.TargetEndpoint),
+											},
 										},
 									},
 								},
 							},
 						},
 					},
-				},
-				DynamicMetadata: &structpb.Struct{
-					Fields: map[string]*structpb.Value{
-						metadata.DestinationEndpointNamespace: structpb.NewStructValue(&structpb.Struct{
-							Fields: map[string]*structpb.Value{
-								metadata.DestinationEndpointKey: structpb.NewStringValue(reqCtx.TargetEndpoint),
-							},
-						}),
+					DynamicMetadata: &structpb.Struct{
+						Fields: map[string]*structpb.Value{
+							metadata.DestinationEndpointNamespace: structpb.NewStructValue(&structpb.Struct{
+								Fields: map[string]*structpb.Value{
+									metadata.DestinationEndpointKey: structpb.NewStringValue(reqCtx.TargetEndpoint),
+								},
+							}),
+						},
 					},
-				},
+				}
+			} else {
+				resp = &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_RequestHeaders{
+						RequestHeaders: &extProcPb.HeadersResponse{
+							Response: &extProcPb.CommonResponse{},
+						},
+					},
+				}
 			}
+
 			if err := srv.Send(resp); err != nil {
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
 
 		case *extProcPb.ProcessingRequest_RequestBody:
 			logger.V(1).Info("Received request body", "endOfStream", v.RequestBody.EndOfStream)
-			resp := &extProcPb.ProcessingResponse{
-				Response: &extProcPb.ProcessingResponse_RequestBody{
-					RequestBody: &extProcPb.BodyResponse{
-						Response: &extProcPb.CommonResponse{},
+			body = append(body, v.RequestBody.Body...)
+
+			var resp *extProcPb.ProcessingResponse
+			if v.RequestBody.EndOfStream {
+				err = s.pickEndpoint(ctx, reqCtx, body)
+				if err != nil {
+					logger.Error(err, "Failed to pick endpoint")
+					return status.Errorf(codes.Internal, "internal error: %v", err)
+				}
+				body = nil
+
+				resp = &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{
+								ClearRouteCache: true,
+								HeaderMutation: &extProcPb.HeaderMutation{
+									SetHeaders: []*configPb.HeaderValueOption{
+										{
+											Header: &configPb.HeaderValue{
+												Key:      metadata.DestinationEndpointKey,
+												RawValue: []byte(reqCtx.TargetEndpoint),
+											},
+										},
+										{
+											Header: &configPb.HeaderValue{
+												Key:      "X-Echo-Set-Header",
+												RawValue: []byte(metadata.ConformanceTestResultHeader + ":" + reqCtx.TargetEndpoint),
+											},
+										},
+									},
+								},
+							},
+						},
 					},
-				},
+					DynamicMetadata: &structpb.Struct{
+						Fields: map[string]*structpb.Value{
+							metadata.DestinationEndpointNamespace: structpb.NewStructValue(&structpb.Struct{
+								Fields: map[string]*structpb.Value{
+									metadata.DestinationEndpointKey: structpb.NewStringValue(reqCtx.TargetEndpoint),
+								},
+							}),
+						},
+					},
+				}
+			} else {
+				resp = &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: &extProcPb.CommonResponse{},
+						},
+					},
+				}
 			}
+
 			if err := srv.Send(resp); err != nil {
 				return status.Errorf(codes.Unknown, "failed to send body response back to Envoy: %v", err)
 			}
