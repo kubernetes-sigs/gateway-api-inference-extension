@@ -17,6 +17,7 @@ limitations under the License.
 package profiling
 
 import (
+	"net/http"
 	"net/http/pprof"
 	"runtime"
 
@@ -36,6 +37,19 @@ func SetupPprofHandlers(mgr ctrl.Manager) error {
 	}
 	for _, p := range profiles {
 		if err := mgr.AddMetricsServerExtraHandler("/debug/pprof/"+p, pprof.Handler(p)); err != nil {
+			return err
+		}
+	}
+
+	handlerFuncs := map[string]http.HandlerFunc{
+		"/debug/pprof/":        pprof.Index,
+		"/debug/pprof/cmdline": pprof.Cmdline,
+		"/debug/pprof/profile": pprof.Profile,
+		"/debug/pprof/symbol":  pprof.Symbol,
+		"/debug/pprof/trace":   pprof.Trace,
+	}
+	for path, handler := range handlerFuncs {
+		if err := mgr.AddMetricsServerExtraHandler(path, handler); err != nil {
 			return err
 		}
 	}
