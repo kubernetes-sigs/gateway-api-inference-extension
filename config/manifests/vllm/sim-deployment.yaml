@@ -19,7 +19,7 @@ spec:
         imagePullPolicy: Always
         args:
         - --model
-        - Qwen/Qwen3-32B
+        - dummy-model-name
         - --port
         - "8000"
         - --max-loras
