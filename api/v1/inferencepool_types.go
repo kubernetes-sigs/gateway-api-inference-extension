@@ -308,7 +308,7 @@ const (
 	// referring HTTPRoute for the specific reason.
 	InferencePoolReasonHTTPRouteNotAccepted InferencePoolReason = "HTTPRouteNotAccepted"
 
-	// InferencePoolReasonEndpointPickerRefMissing is the reason used when the
+	// InferencePoolReasonEndpointPickerRefMissing is the reason used when
 	// the "Accepted" condition is false because the endpointPickerRef field
 	// is unset despite being required by the Inference Gateway implementation.
 	// Until Gateway API Inference Extension release v1.5.0, the endpointPickerRef
