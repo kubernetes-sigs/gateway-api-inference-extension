@@ -30,7 +30,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -618,27 +620,33 @@ func ExtProcServerClient(
 	return extProcClient, conn
 }
 
+var nextPort int32
+
+func init() {
+	// Start from a random offset based on PID to avoid collisions between different test processes.
+	atomic.StoreInt32(&nextPort, 40000+int32(os.Getpid()%10000))
+}
+
 // GetFreePort finds an available IPv4 TCP port on localhost.
-// It works by asking the OS to allocate a port by listening on port 0, capturing the assigned address, and then
-// immediately closing the listener.
-//
-// Note: There is a theoretical race condition where another process grabs the port between the Close() call and the
-// subsequent usage, but this is generally acceptable in hermetic test environments.
+// It uses a thread-safe sequential port allocator with process-specific offsets to prevent race conditions
+// in highly concurrent CI environments.
 func GetFreePort() (int, error) {
-	// Force IPv4 to prevent flakes on dual-stack CI environments
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, fmt.Errorf("failed to listen on a free port: %w", err)
-	}
+	for i := 0; i < 500; i++ {
+		port := atomic.AddInt32(&nextPort, 1)
+		if port > 60000 {
+			atomic.StoreInt32(&nextPort, 40000)
+			port = 40000
+		}
 
-	// Critical: Close the listener immediately so the caller can bind to it.
-	defer listener.Close()
-
-	addr, ok := listener.Addr().(*net.TCPAddr)
-	if !ok {
-		return 0, errors.New("failed to cast listener address to TCPAddr")
+		// Force IPv4 to prevent flakes on dual-stack CI environments
+		listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		if err != nil {
+			continue
+		}
+		listener.Close()
+		return int(port), nil
 	}
-	return addr.Port, nil
+	return 0, errors.New("failed to find a free port after 500 attempts")
 }
 
 // --- Internal Helpers ---
