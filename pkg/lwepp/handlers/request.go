@@ -36,17 +36,42 @@ func (s *StreamingServer) handleRequestHeaders(ctx context.Context, reqCtx *Requ
 	req *extProcPb.ProcessingRequest_RequestHeaders) error {
 	logger := log.FromContext(ctx)
 
+	// Store headers in RequestContext.
+	reqCtx.Headers = make(map[string][]string)
+	for _, header := range req.RequestHeaders.Headers.Headers {
+		reqCtx.Headers[header.Key] = append(reqCtx.Headers[header.Key], envoy.GetHeaderValue(header))
+	}
+
 	var metadataEndpoints []string
 
 	// Read endpoint subset from filter metadata per the EPP protocol.
 	// The data plane sets envoy.lb.subset_hint / x-gateway-destination-endpoint-subset
 	// to constrain which endpoints the EPP may pick from.
 	requestMetadata := envoy.ExtractMetadataValues(fullReq)
+	hasSubsetFilter := false
 	if subsetMap, ok := requestMetadata[metadata.SubsetFilterNamespace].(map[string]any); ok {
-		if endpointList, ok := subsetMap[metadata.SubsetFilterKey].([]any); ok {
-			for _, ep := range endpointList {
-				if epStr, ok := ep.(string); ok {
-					metadataEndpoints = append(metadataEndpoints, epStr)
+		if val, ok := subsetMap[metadata.SubsetFilterKey]; ok {
+			hasSubsetFilter = true
+			// We must support both string and []any types because different Envoy configuration pathways populate metadata differently:
+			// 1. Declarative Ingress/Gateway Filters (e.g., standard HeaderToMetadata rules) extract client list headers as a single flat string (e.g. "10.0.0.1,10.0.0.2").
+			// 2. Programmatic Control Planes or Test Harnesses (e.g., test/integration/util.go) write JSON-native array lists.
+			// Supporting both prevents silent fail-opens (routing to all pods instead of respecting subsets) under standard sidecar setups.
+			switch v := val.(type) {
+			case string:
+				for _, ep := range strings.Split(v, ",") {
+					if trimmed := strings.TrimSpace(ep); trimmed != "" {
+						metadataEndpoints = append(metadataEndpoints, trimmed)
+					}
+				}
+			case []any:
+				for _, ep := range v {
+					if epStr, ok := ep.(string); ok {
+						for _, subEp := range strings.Split(epStr, ",") {
+							if trimmed := strings.TrimSpace(subEp); trimmed != "" {
+								metadataEndpoints = append(metadataEndpoints, trimmed)
+							}
+						}
+					}
 				}
 			}
 		}
@@ -78,7 +103,7 @@ func (s *StreamingServer) handleRequestHeaders(ctx context.Context, reqCtx *Requ
 	}
 
 	var candidates []*datastore.Endpoint
-	if len(filterEndpoints) > 0 {
+	if hasSubsetFilter || len(filterEndpoints) > 0 {
 		// Build a set of IP addresses from the filter list. Filter entries may be
 		// "ip" or "ip:port"; we match only on the IP portion.
 		allowedIPs := make(map[string]struct{}, len(filterEndpoints))
@@ -95,15 +120,26 @@ func (s *StreamingServer) handleRequestHeaders(ctx context.Context, reqCtx *Requ
 				candidates = append(candidates, pod)
 			}
 		}
+		// If a subset filter was explicitly set, we must strictly respect it. If no pods match,
+		// return the empty candidate set so the EPP can return a 503 instead of failing open.
+		reqCtx.Candidates = candidates
+		return nil
 	}
 
-	// If no matches or header not present, use all pods.
-	if len(candidates) == 0 {
-		candidates = allPods
+	// Default fallback: route to all active pods when no subset filter was set.
+	reqCtx.Candidates = allPods
+	return nil
+}
+
+func (s *StreamingServer) pickEndpoint(ctx context.Context, reqCtx *RequestContext, body []byte) error {
+	logger := log.FromContext(ctx)
+
+	pickReq := &PickRequest{
+		Headers: reqCtx.Headers,
+		Body:    body,
 	}
 
-	// For the lightweight implementation (Round Robin), no request context is required.
-	res, err := s.picker.Pick(ctx, &PickRequest{}, candidates)
+	res, err := s.picker.Pick(ctx, pickReq, reqCtx.Candidates)
 	if err != nil {
 		return err
 	}
@@ -116,6 +152,5 @@ func (s *StreamingServer) handleRequestHeaders(ctx context.Context, reqCtx *Requ
 	}
 
 	logger.V(4).Info("Selected endpoint", "podIP", reqCtx.SelectedPodIP, "endpoint", reqCtx.TargetEndpoint)
-
 	return nil
 }
