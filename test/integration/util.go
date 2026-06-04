@@ -18,7 +18,7 @@ limitations under the License.
 // suites of the Gateway API Inference Extension.
 //
 // It encapsulates the complexity of constructing Envoy ext_proc Protobuf messages and managing gRPC streams, allowing
-// individual test suites (e.g., test/integration/epp, test/integration/bbr) to focus on behavioral assertions rather
+// individual test suites (e.g., test/integration/epp) to focus on behavioral assertions rather
 // than protocol boilerplate.
 package integration
 
@@ -66,7 +66,7 @@ const (
 //  1. A RequestHeaders message containing standard inference headers (Objective, Model Rewrite, Request ID).
 //  2. A RequestBody message containing the JSON payload with EndOfStream=true.
 //
-// Use this for the majority of "Happy Path" EPP and BBR streaming tests.
+// Use this for the majority of "Happy Path" EPP streaming tests.
 func ReqLLM(logger logr.Logger, prompt, model, targetModel string) []*extProcPb.ProcessingRequest {
 	return GenerateStreamedRequestSet(logger, prompt, model, targetModel, nil)
 }
