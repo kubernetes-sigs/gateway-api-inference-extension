@@ -19,6 +19,7 @@ package logger
 import (
 	"bytes"
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -73,6 +74,13 @@ func TestLogger(t *testing.T) {
 
 	time.Sleep(6 * time.Second)
 	cancel()
+
+	// Wait for goroutines to log shutdown message to avoid race condition with subsequent tests
+	assert.Eventually(t, func() bool {
+		logOutput := b.read()
+		return strings.Contains(logOutput, "Shutting down prometheus metrics thread") &&
+			strings.Contains(logOutput, "Shutting down metrics logger thread")
+	}, 1*time.Second, 10*time.Millisecond)
 
 	logOutput := b.read()
 	assert.Contains(t, logOutput, "Refreshing Prometheus Metrics	{\"ReadyPods\": 2}")

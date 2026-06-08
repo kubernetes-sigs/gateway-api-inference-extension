@@ -31,7 +31,6 @@ PLATFORMS ?= linux/$(TARGETARCH)
 DOCKER_BUILDX_CMD ?= docker buildx
 IMAGE_BUILD_CMD ?= $(DOCKER_BUILDX_CMD) build
 IMAGE_BUILD_EXTRA_OPTS ?=
-BBR_IMAGE_BUILD_EXTRA_OPTS ?=
 LWEPP_IMAGE_BUILD_EXTRA_OPTS ?=
 LATENCY_TRAINING_IMAGE_BUILD_EXTRA_OPTS ?=
 LATENCY_PREDICTION_IMAGE_BUILD_EXTRA_OPTS ?=
@@ -52,10 +51,6 @@ E2E_IMAGE ?= $(IMAGE_TAG)
 # it is possible though to run e2e tests against clusters other than kind. in such a case, it is the user's responsibility to load
 # the image into the cluster.
 E2E_USE_KIND ?= true
-
-BBR_IMAGE_NAME := bbr
-BBR_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(BBR_IMAGE_NAME)
-BBR_IMAGE_TAG ?= $(BBR_IMAGE_REPO):$(GIT_TAG)
 
 LWEPP_IMAGE_NAME := lwepp
 LWEPP_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(LWEPP_IMAGE_NAME)
@@ -82,7 +77,6 @@ endif
 BUILD_REF ?= $(shell git describe --tags --match '$(ROOT_RELEASE_TAG_MATCH)' --abbrev=0 2>/dev/null)
 ifdef EXTRA_TAG
 IMAGE_EXTRA_TAG ?= $(IMAGE_REPO):$(EXTRA_TAG)
-BBR_IMAGE_EXTRA_TAG ?= $(BBR_IMAGE_REPO):$(EXTRA_TAG)
 LWEPP_IMAGE_EXTRA_TAG ?= $(LWEPP_IMAGE_REPO):$(EXTRA_TAG)
 LATENCY_TRAINING_IMAGE_EXTRA_TAG ?= $(LATENCY_TRAINING_IMAGE_REPO):$(EXTRA_TAG)
 LATENCY_PREDICTION_IMAGE_EXTRA_TAG ?= $(LATENCY_PREDICTION_IMAGE_REPO):$(EXTRA_TAG)
@@ -91,7 +85,6 @@ BUILD_REF = $(EXTRA_TAG)
 endif
 ifdef IMAGE_EXTRA_TAG
 IMAGE_BUILD_EXTRA_OPTS += -t $(IMAGE_EXTRA_TAG)
-BBR_IMAGE_BUILD_EXTRA_OPTS += -t $(BBR_IMAGE_EXTRA_TAG)
 LWEPP_IMAGE_BUILD_EXTRA_OPTS += -t $(LWEPP_IMAGE_EXTRA_TAG)
 LATENCY_TRAINING_IMAGE_BUILD_EXTRA_OPTS += -t $(LATENCY_TRAINING_IMAGE_EXTRA_TAG)
 LATENCY_PREDICTION_IMAGE_BUILD_EXTRA_OPTS += -t $(LATENCY_PREDICTION_IMAGE_EXTRA_TAG)
@@ -207,7 +200,7 @@ api-lint: golangci-api-lint
 	$(GOLANGCI_API_LINT) run -c .golangci-kal.yml --timeout 15m0s ./...
 
 .PHONY: verify
-verify: vet fmt-verify generate ci-lint api-lint verify-all verify-fw-imports verify-component-imports
+verify: vet fmt-verify generate ci-lint api-lint verify-all verify-fw-imports
 	git --no-pager diff --exit-code config api client-go
 
 .PHONY: verify-crds
@@ -219,13 +212,6 @@ verify-crds: kubectl-validate
 .PHONY: verify-fw-imports
 verify-fw-imports:
 	go run hack/verify-framework-imports.go
-
-# Verify EPP and BBR do not have cross-component imports.
-# Known exceptions are listed in the script and reported as warnings.
-# New violations fail the check, preventing additional cross-imports.
-.PHONY: verify-component-imports
-verify-component-imports:
-	go run hack/verify-component-imports.go
 
 #If you are running in local and your helm dependency is outdated, you can run `make verify-helm-charts MODE=local`
 .PHONY: verify-helm-charts
@@ -280,45 +266,7 @@ image-kind: image-build ## Build the EPP image and load it to kind cluster $KIND
 	kind load docker-image $(IMAGE_TAG) --name $(KIND_CLUSTER)
 
 
-##@ Body-based Routing extension
-
 # Build the container image
-.PHONY: bbr-image-local-build
-bbr-image-local-build: ## Build the image using Docker Buildx for local development.
-	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
-	$(MAKE) bbr-image-build PUSH=$(PUSH)
-	$(MAKE) bbr-image-build LOAD=$(LOAD)
-	$(DOCKER_BUILDX_CMD) rm $$BUILDER
-
-.PHONY: bbr-image-local-push
-bbr-image-local-push: PUSH=--push ## Build the image for local development and push it to $IMAGE_REPO.
-bbr-image-local-push: bbr-image-local-build
-
-.PHONY: bbr-image-local-load
-bbr-image-local-load: LOAD=--load ## Build the image for local development and load it in the local Docker registry.
-bbr-image-local-load: bbr-image-local-build
-
-.PHONY: bbr-image-build
-bbr-image-build: ## Build the image using Docker Buildx.
-	$(IMAGE_BUILD_CMD) -f bbr.Dockerfile -t $(BBR_IMAGE_TAG) \
-		--platform=$(PLATFORMS) \
-		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
-		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
-		$(PUSH) \
-		$(LOAD) \
-		$(BBR_IMAGE_BUILD_EXTRA_OPTS) ./
-
-.PHONY: bbr-image-push
-bbr-image-push: PUSH=--push ## Build the image and push it to $IMAGE_REPO.
-bbr-image-push: bbr-image-build
-
-.PHONY: bbr-image-load
-bbr-image-load: LOAD=--load ## Build the image and load it in the local Docker registry.
-bbr-image-load: bbr-image-build
-
-.PHONY: bbr-image-kind
-bbr-image-kind: bbr-image-build ## Build the image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
-	kind load docker-image $(BBR_IMAGE_TAG) --name $(KIND_CLUSTER)
 
 ##@ Lightweight EPP
 
@@ -535,10 +483,6 @@ uninstall: generate kustomize ## Uninstall CRDs from the K8s cluster specified i
 .PHONY: inferencepool-helm-chart-push
 inferencepool-helm-chart-push: yq helm-install
 	CHART=inferencepool EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
-
-.PHONY: bbr-helm-chart-push
-bbr-helm-chart-push: yq helm-install
-	CHART=body-based-routing EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
 
 .PHONY: standalone-helm-chart-push
 standalone-helm-chart-push: yq helm-install

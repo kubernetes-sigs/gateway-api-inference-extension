@@ -42,10 +42,8 @@ LIMIT="${LIMIT:-5000}"
 
 images=(
   "charts/inferencepool"
-  "charts/body-based-routing"
   "charts/standalone"
   "epp"
-  "bbr"
   "latency-prediction-server"
   "latency-training-server"
 )
