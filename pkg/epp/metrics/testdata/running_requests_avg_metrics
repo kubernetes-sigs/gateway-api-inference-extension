@@ -1,3 +1,0 @@
-# HELP inference_pool_average_running_requests [ALPHA] The average number of running requests across model servers in the pool.
-# TYPE inference_pool_average_running_requests gauge
-inference_pool_average_running_requests{name="p1"} 0.5

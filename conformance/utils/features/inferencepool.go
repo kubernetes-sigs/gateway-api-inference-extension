@@ -18,7 +18,6 @@ package features
 
 import (
 	"k8s.io/apimachinery/pkg/util/sets"
-
 	gatewayfeatures "sigs.k8s.io/gateway-api/pkg/features"
 )
 

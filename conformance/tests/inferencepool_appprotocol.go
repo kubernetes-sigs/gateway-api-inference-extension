@@ -27,9 +27,8 @@ import (
 	"sigs.k8s.io/gateway-api/pkg/features"
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/headers"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	requestcontroltest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/test"
-	schedulingtest "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test"
 )
 
 func init() {
@@ -123,13 +122,13 @@ var InferencePoolAppProtocol = suite.ConformanceTest{
 									Method: http.MethodPost,
 									Body:   requestBody,
 									Headers: map[string]string{
-										schedulingtest.HeaderTestEppEndPointSelectionKey: selectedEndpoint,
+										headers.HeaderTestEppEndPointSelectionKey: selectedEndpoint,
 									},
 								},
 								Response: gwhttp.Response{
 									StatusCodes: []int{http.StatusOK},
 									Headers: map[string]string{
-										requestcontroltest.ConformanceTestResultHeader: selectedEndpoint,
+										headers.ConformanceTestResultHeader: selectedEndpoint,
 									},
 								},
 								Backend:   pod.Name,
