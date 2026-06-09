@@ -43,7 +43,7 @@ require (
 require (
 	github.com/go-logr/stdr v1.2.2
 	github.com/go-logr/zapr v1.3.0
-	github.com/google/cel-go v0.28.0
+	github.com/google/cel-go v0.28.1
 	github.com/jellydator/ttlcache/v3 v3.4.0
 	github.com/spf13/pflag v1.0.10
 	go.opentelemetry.io/otel/trace v1.44.0
