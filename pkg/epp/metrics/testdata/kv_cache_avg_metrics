@@ -1,3 +1,0 @@
-# HELP inference_pool_average_kv_cache_utilization [ALPHA] The average kv cache utilization for an inference server pool.
-# TYPE inference_pool_average_kv_cache_utilization gauge
-inference_pool_average_kv_cache_utilization{name="p1"} 0.3

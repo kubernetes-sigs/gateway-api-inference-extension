@@ -34,8 +34,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/headers"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test"
 )
 
 func init() {
@@ -126,7 +126,7 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 					Method: http.MethodPost,
 					Body:   `{"model":"conformance-fake-model","prompt":"Warmup"}`,
 					Headers: map[string]string{
-						test.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
+						headers.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
 					},
 				},
 				Response: gwhttp.Response{
@@ -144,15 +144,15 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		// Build quick lookup sets for attributing each hit to a pool by backend pod name.
 		primarySet := sets.New(primaryPodNames...)
 		secondarySet := sets.New(secondaryPodNames...)
-		headers := map[string]string{
-			test.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
+		headersMap := map[string]string{
+			headers.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
 		}
 		expected := gwhttp.ExpectedResponse{
 			Request: gwhttp.Request{
 				Host:    hostname,
 				Path:    path,
 				Method:  http.MethodPost,
-				Headers: headers,
+				Headers: headersMap,
 				Body:    requestBody,
 			},
 			Response: gwhttp.Response{

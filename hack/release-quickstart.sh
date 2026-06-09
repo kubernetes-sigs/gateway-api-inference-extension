@@ -89,31 +89,16 @@ echo "Updating ${CONFORMANCE_GOMOD} and ${CONFORMANCE_GOSUM} ..."
 # -----------------------------------------------------------------------------
 # Update image references
 # -----------------------------------------------------------------------------
-#TODO: Put all helm values files into an array to loop over
-EPP_HELM="config/charts/inferencepool/values.yaml"
-LATENCY_ROUTING_HELM="config/charts/epplib/values.yaml"
-STANDALONE_HELM="config/charts/standalone/values.yaml"
 CONFORMANCE_MANIFESTS="conformance/resources/base.yaml"
-CONFORMANCE_EPP_STAGING_IMAGE="us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp"
-AGENTGATEWAY_IMAGE_REGEX="cr\.agentgateway\.dev/agentgateway"
-echo "Updating ${EPP_HELM}, ${LATENCY_ROUTING_HELM}, ${STANDALONE_HELM} and ${CONFORMANCE_MANIFESTS} ..."
+CONFORMANCE_EPP_STAGING_IMAGE="us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lwepp"
+echo "Updating ${CONFORMANCE_MANIFESTS} ..."
 
-# Update the container tag.
-sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$EPP_HELM"
-sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$LATENCY_ROUTING_HELM"
-sed -i.bak -E "s|(tag: )[^\"[:space:]]+|\1${RELEASE_TAG}|g" "$STANDALONE_HELM"
-# Update the standalone agentgateway preset from the floating development tag
-# to the stable tag selected for the release.
-sed -i.bak -E "s|(${AGENTGATEWAY_IMAGE_REGEX}:)[^\"[:space:]]+|\1${AGENTGATEWAY_TAG}|g" "$STANDALONE_HELM"
 # Update the conformance EPP image from the staging `main` tag to the release tag.
 sed -i.bak -E "s|${CONFORMANCE_EPP_STAGING_IMAGE}:[^\"[:space:]]+|${CONFORMANCE_EPP_STAGING_IMAGE}:${RELEASE_TAG}|g" "$CONFORMANCE_MANIFESTS"
 # Update the container image pull policy.
-sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/epp/{n;s/Always/IfNotPresent/;}' "$CONFORMANCE_MANIFESTS"
+sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/lwepp/{n;s/Always/IfNotPresent/;}' "$CONFORMANCE_MANIFESTS"
 
 # Update the container registry.
-sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$EPP_HELM"
-sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$LATENCY_ROUTING_HELM"
-sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$STANDALONE_HELM"
 sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$CONFORMANCE_MANIFESTS"
 
 # -----------------------------------------------------------------------------
@@ -158,8 +143,8 @@ done
 # -----------------------------------------------------------------------------
 # Stage the changes
 # -----------------------------------------------------------------------------
-echo "Staging $VERSION_FILE $UPDATED_CRD $README $CONFORMANCE_GOMOD $CONFORMANCE_GOSUM $EPP_HELM $LATENCY_ROUTING_HELM $STANDALONE_HELM $CONFORMANCE_MANIFESTS ${VLLM_GPU_DEPLOYS[*]} $VLLM_CPU_DEPLOY ${VLLM_SIM_DEPLOYS[*]} files..."
-git add "$VERSION_FILE" "$UPDATED_CRD" "$README" "$CONFORMANCE_GOMOD" "$CONFORMANCE_GOSUM" "$EPP_HELM" "$LATENCY_ROUTING_HELM" "$STANDALONE_HELM" "$CONFORMANCE_MANIFESTS" "${VLLM_GPU_DEPLOYS[@]}" "$VLLM_CPU_DEPLOY" "${VLLM_SIM_DEPLOYS[@]}"
+echo "Staging $VERSION_FILE $UPDATED_CRD $README $CONFORMANCE_GOMOD $CONFORMANCE_GOSUM $CONFORMANCE_MANIFESTS ${VLLM_GPU_DEPLOYS[*]} $VLLM_CPU_DEPLOY ${VLLM_SIM_DEPLOYS[*]} files..."
+git add "$VERSION_FILE" "$UPDATED_CRD" "$README" "$CONFORMANCE_GOMOD" "$CONFORMANCE_GOSUM" "$CONFORMANCE_MANIFESTS" "${VLLM_GPU_DEPLOYS[@]}" "$VLLM_CPU_DEPLOY" "${VLLM_SIM_DEPLOYS[@]}"
 
 # -----------------------------------------------------------------------------
 # Cleanup backup files and finish

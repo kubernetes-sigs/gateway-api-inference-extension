@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/server"
 )

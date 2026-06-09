@@ -28,9 +28,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/headers"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/requestcontrol/test"
-	testscheduling "sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test"
 )
 
 func init() {
@@ -91,13 +90,13 @@ var GatewayDestinationEndpointServed = suite.ConformanceTest{
 							Method: http.MethodPost,
 							Body:   requestBody,
 							Headers: map[string]string{
-								testscheduling.HeaderTestEppEndPointSelectionKey: podIPs[i],
+								headers.HeaderTestEppEndPointSelectionKey: podIPs[i],
 							},
 						},
 						Response: gwhttp.Response{
 							StatusCodes: []int{http.StatusOK},
 							Headers: map[string]string{
-								test.ConformanceTestResultHeader: podIPs[i] + ":3000", // The echo server's port is 3000.
+								headers.ConformanceTestResultHeader: podIPs[i] + ":3000", // The echo server's port is 3000.
 							},
 						},
 						Backend:   podNames[i],

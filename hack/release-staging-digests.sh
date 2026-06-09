@@ -41,11 +41,7 @@ REPOSITORY="${REPOSITORY:-gateway-api-inference-extension}"
 LIMIT="${LIMIT:-5000}"
 
 images=(
-  "charts/inferencepool"
-  "charts/standalone"
-  "epp"
-  "latency-prediction-server"
-  "latency-training-server"
+  "lwepp"
 )
 
 find_digest() {

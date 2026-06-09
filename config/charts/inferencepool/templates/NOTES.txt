@@ -1,1 +1,0 @@
-InferencePool {{ .Release.Name }} deployed.

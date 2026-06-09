@@ -32,8 +32,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/headers"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test"
 )
 
 func init() {
@@ -98,7 +98,7 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 						Method: http.MethodPost,
 						Body:   requestBody,
 						Headers: map[string]string{
-							test.HeaderTestEppEndPointSelectionKey: podIPs[i],
+							headers.HeaderTestEppEndPointSelectionKey: podIPs[i],
 						},
 					},
 					Response: gwhttp.Response{
@@ -136,10 +136,10 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 			t.Run(tc.name, func(t *testing.T) {
 				eppHeaderValue := strings.Join(tc.podIPsToBeReturnedByEPP, ",")
 				headers := map[string]string{
-					test.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
+					headers.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
 				}
 
-				t.Logf("Sending request to %s with EPP header '%s: %s'", gwAddr, test.HeaderTestEppEndPointSelectionKey, eppHeaderValue)
+				t.Logf("Sending request to %s with EPP header '%s: %s'", gwAddr, headers.HeaderTestEppEndPointSelectionKey, eppHeaderValue)
 				t.Logf("Expecting traffic to be routed to pod: %v", tc.expectAllRequestsRoutedWithinPodNames)
 
 				assertTrafficOnlyReachesToExpectedPods(t, s, gwAddr, gwhttp.ExpectedResponse{
