@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"slices"
 	"testing"
 
@@ -32,7 +33,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
 	clientsetscheme "k8s.io/client-go/kubernetes/scheme"
@@ -43,7 +43,7 @@ import (
 	apikubernetes "sigs.k8s.io/gateway-api/conformance/utils/kubernetes"
 	confsuite "sigs.k8s.io/gateway-api/conformance/utils/suite"
 	"sigs.k8s.io/gateway-api/conformance/utils/tlog"
-	gatewayfeatures "sigs.k8s.io/gateway-api/pkg/features"
+	"sigs.k8s.io/yaml"
 
 	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
@@ -102,69 +102,43 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	cs, err := clientset.NewForConfig(cfg)
 	require.NoError(t, err, "error initializing Kubernetes clientset")
 
-	exemptFeatures := confsuite.ParseSupportedFeatures(*confflags.ExemptFeatures)
-	skipTests := confsuite.ParseSkipTests(*confflags.SkipTests)
-	namespaceLabels := confsuite.ParseKeyValuePairs(*confflags.NamespaceLabels)
-	namespaceAnnotations := confsuite.ParseKeyValuePairs(*confflags.NamespaceAnnotations)
+	configurableOpts := &confsuite.ConfigurableOptions{
+		CleanupBaseResources: confflags.DefaultCleanupBaseResources,
+		CleanupTestResources: confflags.DefaultCleanupTestResources,
+		GatewayClassName:     confflags.DefaultGatewayClassName,
+		Mode:                 confflags.DefaultMode,
+		TimeoutConfig:        inferenceconfig.DefaultInferenceExtensionTimeoutConfig().TimeoutConfig,
+		ConformanceProfiles:  []confsuite.ConformanceProfileName{GatewayLayerProfileName},
+		SupportedFeatures:    GatewayLayerProfile.CoreFeatures.UnsortedList(),
+	}
 
-	// Initially, run the GatewayLayerProfile. This will expand as other profiles
-	// (EPP, ModelServer) are added and can be selected via flags in future iterations.
-	conformanceProfiles := sets.New(GatewayLayerProfileName)
+	if *confflags.ConformanceOptionsFile != "" {
+		data, err := os.ReadFile(*confflags.ConformanceOptionsFile)
+		require.NoError(t, err, "error reading conformance options file")
 
-	// Implementation details from flags
-	implementation := confsuite.ParseImplementation(
-		*confflags.ImplementationOrganization,
-		*confflags.ImplementationProject,
-		*confflags.ImplementationURL,
-		*confflags.ImplementationVersion,
-		*confflags.ImplementationContact,
-	)
+		err = yaml.Unmarshal(data, configurableOpts)
+		require.NoError(t, err, "error unmarshalling conformance options file")
+	}
+	confflags.ApplyAll(configurableOpts)
+
+	if len(configurableOpts.ConformanceProfiles) == 0 {
+		configurableOpts.ConformanceProfiles = []confsuite.ConformanceProfileName{GatewayLayerProfileName}
+	}
 
 	baseManifestsValue := "resources/base.yaml"
 	opts := confsuite.ConformanceOptions{
-		Client:               c,
-		ClientOptions:        clientOptions,
-		Clientset:            cs,
-		RestConfig:           cfg,
-		GatewayClassName:     *confflags.GatewayClassName,
-		BaseManifests:        baseManifestsValue,
-		Debug:                *confflags.ShowDebug,
-		CleanupBaseResources: *confflags.CleanupBaseResources,
-		SupportedFeatures:    sets.New[gatewayfeatures.FeatureName](),
-		TimeoutConfig:        inferenceconfig.DefaultInferenceExtensionTimeoutConfig().TimeoutConfig,
-		SkipTests:            skipTests,
-		ExemptFeatures:       exemptFeatures,
-		RunTest:              *confflags.RunTest,
-		Mode:                 *confflags.Mode,
-		Implementation:       implementation,
-		ConformanceProfiles:  conformanceProfiles,
-		ManifestFS:           []fs.FS{&Manifests},
-		ReportOutputPath:     *confflags.ReportOutput,
-		SkipProvisionalTests: *confflags.SkipProvisionalTests,
-		AllowCRDsMismatch:    *confflags.AllowCRDsMismatch,
-		NamespaceLabels:      namespaceLabels,
-		NamespaceAnnotations: namespaceAnnotations,
+		ConfigurableOptions: *configurableOpts,
+		Client:              c,
+		ClientOptions:       clientOptions,
+		Clientset:           cs,
+		RestConfig:          cfg,
+		BaseManifests:       baseManifestsValue,
+		ManifestFS:          []fs.FS{&Manifests},
 		// TODO: Add the inference extension specific fields to ConformanceOptions struct if needed,
 		// or handle them during report generation.
 		// GatewayAPIInferenceExtensionChannel: inferenceExtensionChannel,
 	}
-
-	// Populate SupportedFeatures based on the GatewayLayerProfile.
-	// Since all features are mandatory for this profile, add all defined core features.
-	if opts.ConformanceProfiles.Has(GatewayLayerProfileName) {
-		logDebugf(t, opts.Debug, "Populating SupportedFeatures with GatewayLayerProfile.CoreFeatures: %v", GatewayLayerProfile.CoreFeatures.UnsortedList())
-		if GatewayLayerProfile.CoreFeatures.Len() > 0 {
-			opts.SupportedFeatures = opts.SupportedFeatures.Insert(GatewayLayerProfile.CoreFeatures.UnsortedList()...)
-		}
-	}
-
-	// Remove any features explicitly exempted via flags.
-	if opts.ExemptFeatures.Len() > 0 {
-		logDebugf(t, opts.Debug, "Removing ExemptFeatures from SupportedFeatures: %v", opts.ExemptFeatures.UnsortedList())
-		opts.SupportedFeatures = opts.SupportedFeatures.Delete(opts.ExemptFeatures.UnsortedList()...)
-	}
-
-	logDebugf(t, opts.Debug, "Final opts.SupportedFeatures: %v", opts.SupportedFeatures.UnsortedList())
+	logDebugf(t, opts.Debug, "Final opts.SupportedFeatures: %v", opts.SupportedFeatures)
 
 	return opts
 }
