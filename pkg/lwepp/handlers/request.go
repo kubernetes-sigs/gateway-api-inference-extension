@@ -104,20 +104,28 @@ func (s *StreamingServer) handleRequestHeaders(ctx context.Context, reqCtx *Requ
 
 	var candidates []*datastore.Endpoint
 	if hasSubsetFilter || len(filterEndpoints) > 0 {
-		// Build a set of IP addresses from the filter list. Filter entries may be
-		// "ip" or "ip:port"; we match only on the IP portion.
-		allowedIPs := make(map[string]struct{}, len(filterEndpoints))
+		// Map of IP -> set of allowed ports. If an IP exists in allowAllPorts, then all ports are allowed.
+		allowedPorts := make(map[string]map[string]struct{})
+		allowAllPorts := make(map[string]bool)
 		for _, ep := range filterEndpoints {
 			ep = strings.TrimSpace(ep)
-			if host, _, err := net.SplitHostPort(ep); err == nil {
-				allowedIPs[host] = struct{}{}
+			if host, port, err := net.SplitHostPort(ep); err == nil {
+				if _, ok := allowedPorts[host]; !ok {
+					allowedPorts[host] = make(map[string]struct{})
+				}
+				allowedPorts[host][port] = struct{}{}
 			} else {
-				allowedIPs[ep] = struct{}{}
+				allowAllPorts[ep] = true
 			}
 		}
+
 		for _, pod := range allPods {
-			if _, ok := allowedIPs[pod.Address]; ok {
+			if allowAllPorts[pod.Address] {
 				candidates = append(candidates, pod)
+			} else if ports, ok := allowedPorts[pod.Address]; ok {
+				if _, ok := ports[pod.Port]; ok {
+					candidates = append(candidates, pod)
+				}
 			}
 		}
 		// If a subset filter was explicitly set, we must strictly respect it. If no pods match,

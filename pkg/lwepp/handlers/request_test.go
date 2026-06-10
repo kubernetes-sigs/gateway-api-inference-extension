@@ -477,3 +477,75 @@ func TestHandleRequestHeaders_MixedArrayAndCommaStringElements(t *testing.T) {
 	assert.Len(t, reqCtx.Candidates, 2)
 	assert.ElementsMatch(t, []string{"10.0.0.2", "10.0.0.3"}, []string{reqCtx.Candidates[0].Address, reqCtx.Candidates[1].Address})
 }
+
+func TestHandleRequestHeaders_PortAwareFiltering(t *testing.T) {
+	pods := []*datastore.Endpoint{
+		{Address: "10.0.0.1", Port: "8080"},
+		{Address: "10.0.0.1", Port: "9090"},
+		{Address: "10.0.0.2", Port: "8080"},
+		{Address: "10.0.0.2", Port: "9090"},
+	}
+	ds := &mockDatastore{pods: pods}
+	server := NewStreamingServer(ds)
+
+	tests := []struct {
+		name               string
+		filterValue        string
+		expectedCandidates []*datastore.Endpoint
+	}{
+		{
+			name:        "Match specific port only",
+			filterValue: "10.0.0.1:8080",
+			expectedCandidates: []*datastore.Endpoint{
+				{Address: "10.0.0.1", Port: "8080"},
+			},
+		},
+		{
+			name:        "Match all ports for IP when no port specified",
+			filterValue: "10.0.0.1",
+			expectedCandidates: []*datastore.Endpoint{
+				{Address: "10.0.0.1", Port: "8080"},
+				{Address: "10.0.0.1", Port: "9090"},
+			},
+		},
+		{
+			name:        "Mix of IP:Port and IP-only filters",
+			filterValue: "10.0.0.1:8080,10.0.0.2",
+			expectedCandidates: []*datastore.Endpoint{
+				{Address: "10.0.0.1", Port: "8080"},
+				{Address: "10.0.0.2", Port: "8080"},
+				{Address: "10.0.0.2", Port: "9090"},
+			},
+		},
+		{
+			name:               "No matching ports for the filtered IP",
+			filterValue:        "10.0.0.1:3000",
+			expectedCandidates: []*datastore.Endpoint{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			fullReq := &extProcPb.ProcessingRequest{
+				MetadataContext: &envoyCorev3.Metadata{
+					FilterMetadata: map[string]*structpb.Struct{
+						metadata.SubsetFilterNamespace: {
+							Fields: map[string]*structpb.Value{
+								metadata.SubsetFilterKey: structpb.NewStringValue(tc.filterValue),
+							},
+						},
+					},
+				},
+			}
+			req := &extProcPb.ProcessingRequest_RequestHeaders{
+				RequestHeaders: &extProcPb.HttpHeaders{
+					Headers: &envoyCorev3.HeaderMap{},
+				},
+			}
+			reqCtx := &RequestContext{}
+			err := server.handleRequestHeaders(context.Background(), reqCtx, fullReq, req)
+			assert.NoError(t, err)
+			assert.ElementsMatch(t, tc.expectedCandidates, reqCtx.Candidates)
+		})
+	}
+}
