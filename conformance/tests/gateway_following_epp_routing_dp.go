@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -35,8 +36,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/headers"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test"
 )
 
 // dpPorts are the data parallel ports exposed by the backend deployment. Update if the ports
@@ -106,7 +107,7 @@ var GatewayFollowingEPPRoutingWithDataParallelism = suite.ConformanceTest{
 						Method: http.MethodPost,
 						Body:   requestBody,
 						Headers: map[string]string{
-							test.HeaderTestEppEndPointSelectionKey: backend.IP,
+							headers.HeaderTestEppEndPointSelectionKey: backend.IP,
 						},
 					},
 					Response:  gwhttp.Response{StatusCodes: []int{http.StatusOK}},
@@ -152,8 +153,8 @@ var GatewayFollowingEPPRoutingWithDataParallelism = suite.ConformanceTest{
 				// Build the EPP header from the endpoint map (stable order).
 				eppHeaderValue := buildEPPHeader(tc.ipToAllowedPorts)
 
-				headers := map[string]string{
-					test.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
+				headersMap := map[string]string{
+					headers.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
 				}
 
 				assertTrafficOnlyReachesToExpectedPodsDP(
@@ -164,7 +165,7 @@ var GatewayFollowingEPPRoutingWithDataParallelism = suite.ConformanceTest{
 							Path:    path,
 							Method:  http.MethodPost,
 							Body:    requestBody,
-							Headers: headers,
+							Headers: headersMap,
 						},
 						Response:  gwhttp.Response{StatusCode: http.StatusOK},
 						Backend:   appPodBackendPrefix,
@@ -197,45 +198,61 @@ func assertTrafficOnlyReachesToExpectedPodsDP(
 	var (
 		rt = suite.RoundTripper
 		g  errgroup.Group
-		r  = gwhttp.MakeRequest(t, &expected, gwAddr, "HTTP", "http")
 	)
+	gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, rt, suite.TimeoutConfig, gwAddr, expected)
 	g.SetLimit(concurrency)
 
 	for i := 0; i < totalRequests; i++ {
 		g.Go(func() error {
-			cReq, cRes, err := rt.CaptureRoundTrip(r)
-			if err != nil {
-				return fmt.Errorf("failed roundtrip: %w", err)
-			}
-			// Baseline response checks (status/namespace/backend, etc.)
-			if err := gwhttp.CompareRoundTrip(t, &r, cReq, cRes, expected); err != nil {
-				return fmt.Errorf("expectation failed: %w", err)
-			}
-			// Enforce no leakage to non-selected pods.
-			if !slices.Contains(expectedPodNames, cReq.Pod) {
-				return fmt.Errorf("unexpected pod %q (expected one of %v)", cReq.Pod, expectedPodNames)
-			}
+			timeout := time.After(2 * time.Minute)
+			for {
+				req := gwhttp.MakeRequest(t, &expected, gwAddr, "HTTP", "http")
+				cReq, cRes, err := rt.CaptureRoundTrip(req)
+				if err == nil {
+					compErr := gwhttp.CompareRoundTrip(t, &req, cReq, cRes, expected)
+					if compErr == nil {
+						// Enforce no leakage to non-selected pods.
+						if !slices.Contains(expectedPodNames, cReq.Pod) {
+							return fmt.Errorf("unexpected pod %q (expected one of %v)", cReq.Pod, expectedPodNames)
+						}
 
-			// Validate httpPort from JSON response body vs EPP intent.
-			if cReq.HTTPPort == "" {
-				return errors.New("missing httpPort in echo JSON body response")
-			}
-			ip := podNameToIP[cReq.Pod]
-			allowed, ok := ipToAllowedPorts[ip]
-			if !ok {
-				return fmt.Errorf("pod %q (IP %s) not present in EPP selection", cReq.Pod, ip)
-			}
-			if len(allowed) > 0 {
-				if _, ok := allowed[cReq.HTTPPort]; !ok {
-					return fmt.Errorf("unexpected httpPort %q for IP %s (allowed: %v)", cReq.HTTPPort, ip, keys(allowed))
-				}
-			} else {
-				if _, ok := dpPorts[cReq.HTTPPort]; !ok {
-					return fmt.Errorf("unexpected httpPort %q for IP %s (expected one of ports %v)", cReq.HTTPPort, ip, keys(dpPorts))
-				}
-			}
+						// Validate httpPort from JSON response body vs EPP intent.
+						if cReq.HTTPPort == "" {
+							return errors.New("missing httpPort in echo JSON body response")
+						}
+						ip := podNameToIP[cReq.Pod]
+						allowed, ok := ipToAllowedPorts[ip]
+						if !ok {
+							return fmt.Errorf("pod %q (IP %s) not present in EPP selection", cReq.Pod, ip)
+						}
+						if len(allowed) > 0 {
+							if _, ok := allowed[cReq.HTTPPort]; !ok {
+								return fmt.Errorf("unexpected httpPort %q for IP %s (allowed: %v)", cReq.HTTPPort, ip, keys(allowed))
+							}
+						} else {
+							if _, ok := dpPorts[cReq.HTTPPort]; !ok {
+								return fmt.Errorf("unexpected httpPort %q for IP %s (expected one of ports %v)", cReq.HTTPPort, ip, keys(dpPorts))
+							}
+						}
 
-			return nil
+						return nil
+					}
+					if cRes != nil && (cRes.StatusCode == http.StatusNotFound || cRes.StatusCode == http.StatusServiceUnavailable) {
+						// Transient unconverged GFE instance; back off and retry
+					} else {
+						return fmt.Errorf("expectation failed: %w", compErr)
+					}
+				}
+
+				select {
+				case <-timeout:
+					if err != nil {
+						return fmt.Errorf("failed roundtrip after retries: %w", err)
+					}
+					return fmt.Errorf("expectation failed after retries")
+				case <-time.After(500 * time.Millisecond):
+				}
+			}
 		})
 	}
 	if err := g.Wait(); err != nil {

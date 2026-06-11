@@ -120,15 +120,6 @@ generate: controller-gen code-generator tidy ## Generate WebhookConfiguration, C
 	$(CONTROLLER_GEN) crd output:dir="./config/crd/bases" paths="./..."
 	./hack/update-codegen.sh
 
-.PHONY: generate-proto
-generate-proto: protoc-gen-go protoc-gen-go-grpc ## Generate Golang code from protobuf files.
-	PATH="$(LOCALBIN):$$PATH" $(PROTOC) \
-		-I pkg/epp/framework/plugins/requesthandling/parsers/vllmgrpc/api/proto \
-		-I . \
-		--go_out=module=sigs.k8s.io/gateway-api-inference-extension:. \
-		--go-grpc_out=module=sigs.k8s.io/gateway-api-inference-extension:. \
-		pkg/epp/framework/plugins/requesthandling/parsers/vllmgrpc/api/proto/*.proto
-
 # Use same code-generator version as k8s.io/api
 CODEGEN_VERSION := $(shell go list -m -f '{{.Version}}' k8s.io/api)
 CODEGEN = $(shell pwd)/bin/code-generator
@@ -160,10 +151,9 @@ fmt-verify:
 vet: ## Run go vet against code.
 	go vet ./...
 
-#If you are running in local and your helm dependency is outdated, you can run `make test MODE=local`
 .PHONY: test
-test: generate fmt vet envtest image-build verify-crds verify-helm-charts ## Run tests.
-	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e | grep -v /conformance) -race -coverprofile cover.out
+test: generate fmt vet envtest lwepp-image-build verify-crds ## Run tests.
+	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /conformance) -race -coverprofile cover.out
 
 .PHONY: test-unit
 test-unit: ## Run unit tests.
@@ -171,17 +161,6 @@ test-unit: ## Run unit tests.
 	go tool cover -func=cover.out; \
 	rm cover.out
 
-.PHONY: test-benchmark
-test-benchmark: ## Run benchmarks.
-	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./pkg/... -bench=. -benchmem;
-
-.PHONY: test-integration
-test-integration: envtest ## Run integration tests.
-	CGO_ENABLED=1 KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./test/integration/... -race -coverprofile cover.out
-
-.PHONY: test-e2e
-test-e2e: ## Run end-to-end tests against an existing Kubernetes cluster.
-	MANIFEST_PATH=$(PROJECT_DIR)/$(E2E_MANIFEST_PATH) E2E_IMAGE=$(E2E_IMAGE) USE_KIND=$(E2E_USE_KIND) ./hack/test-e2e.sh
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -200,23 +179,12 @@ api-lint: golangci-api-lint
 	$(GOLANGCI_API_LINT) run -c .golangci-kal.yml --timeout 15m0s ./...
 
 .PHONY: verify
-verify: vet fmt-verify generate ci-lint api-lint verify-all verify-fw-imports
+verify: vet fmt-verify generate ci-lint api-lint verify-all
 	git --no-pager diff --exit-code config api client-go
 
 .PHONY: verify-crds
 verify-crds: kubectl-validate
 	hack/verify-manifests.sh
-
-# Verify framework import rules.
-# Runs in permissive mode: allows current exceptions, fails on new violations.
-.PHONY: verify-fw-imports
-verify-fw-imports:
-	go run hack/verify-framework-imports.go
-
-#If you are running in local and your helm dependency is outdated, you can run `make verify-helm-charts MODE=local`
-.PHONY: verify-helm-charts
-verify-helm-charts: helm-install
-	hack/verify-helm.sh $(MODE)
 
 # Run static analysis.
 .PHONY: verify-all
@@ -236,35 +204,6 @@ image-local-build: ## Build the EPP image using Docker Buildx for local developm
 .PHONY: image-local-push
 image-local-push: PUSH=--push ## Build the EPP image for local development and push it to $IMAGE_REPO.
 image-local-push: image-local-build
-
-.PHONY: image-local-load
-image-local-load: LOAD=--load ## Build the EPP image for local development and load it in the local Docker registry.
-image-local-load: image-local-build
-
-.PHONY: image-build
-image-build: ## Build the EPP image using Docker Buildx.
-	$(IMAGE_BUILD_CMD) -t $(IMAGE_TAG) \
-		--platform=$(PLATFORMS) \
-		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
-		--build-arg BUILDER_IMAGE=$(BUILDER_IMAGE) \
-		--build-arg COMMIT_SHA=${GIT_COMMIT_SHA} \
-		--build-arg BUILD_REF=${BUILD_REF} \
-		$(PUSH) \
-		$(LOAD) \
-		$(IMAGE_BUILD_EXTRA_OPTS) ./
-
-.PHONY: image-push
-image-push: PUSH=--push ## Build the EPP image and push it to $IMAGE_REPO.
-image-push: image-build
-
-.PHONY: image-load
-image-load: LOAD=--load ## Build the EPP image and load it in the local Docker registry.
-image-load: image-build
-
-.PHONY: image-kind
-image-kind: image-build ## Build the EPP image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
-	kind load docker-image $(IMAGE_TAG) --name $(KIND_CLUSTER)
-
 
 # Build the container image
 
@@ -309,117 +248,6 @@ lwepp-image-load: lwepp-image-build
 .PHONY: lwepp-image-kind
 lwepp-image-kind: lwepp-image-build ## Build the image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
 	kind load docker-image $(LWEPP_IMAGE_TAG) --name $(KIND_CLUSTER)
-
-##@ Latency Prediction - Training Server
-
-.PHONY: latency-training-image-local-build
-latency-training-image-local-build: ## Build the latency training server image using Docker Buildx for local development.
-	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
-	$(MAKE) latency-training-image-build PUSH=$(PUSH)
-	$(MAKE) latency-training-image-build LOAD=$(LOAD)
-	$(DOCKER_BUILDX_CMD) rm $$BUILDER
-
-.PHONY: latency-training-image-local-push
-latency-training-image-local-push: PUSH=--push ## Build the latency training server image for local development and push it to registry.
-latency-training-image-local-push: latency-training-image-local-build
-
-.PHONY: latency-training-image-local-load
-latency-training-image-local-load: LOAD=--load ## Build the latency training server image for local development and load it in the local Docker registry.
-latency-training-image-local-load: latency-training-image-local-build
-
-.PHONY: latency-training-image-build
-latency-training-image-build: ## Build the latency training server image using Docker Buildx.
-	cd $(CURDIR)/latencypredictor && $(IMAGE_BUILD_CMD) -f Dockerfile-training -t $(LATENCY_TRAINING_IMAGE_TAG) \
-		--platform=$(PLATFORMS) \
-		$(PUSH) \
-		$(LOAD) \
-		$(LATENCY_TRAINING_IMAGE_BUILD_EXTRA_OPTS) ./
-
-.PHONY: latency-training-image-push
-latency-training-image-push: PUSH=--push ## Build the latency training server image and push it to registry.
-latency-training-image-push: latency-training-image-build
-
-.PHONY: latency-training-image-load
-latency-training-image-load: LOAD=--load ## Build the latency training server image and load it in the local Docker registry.
-latency-training-image-load: latency-training-image-build
-
-.PHONY: latency-training-image-kind
-latency-training-image-kind: latency-training-image-build ## Build the latency training server image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
-	kind load docker-image $(LATENCY_TRAINING_IMAGE_TAG) --name $(KIND_CLUSTER)
-
-##@ Latency Prediction - Prediction Server
-
-.PHONY: latency-prediction-image-local-build
-latency-prediction-image-local-build: ## Build the latency prediction server image using Docker Buildx for local development.
-	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
-	$(MAKE) latency-prediction-image-build PUSH=$(PUSH)
-	$(MAKE) latency-prediction-image-build LOAD=$(LOAD)
-	$(DOCKER_BUILDX_CMD) rm $$BUILDER
-
-.PHONY: latency-prediction-image-local-push
-latency-prediction-image-local-push: PUSH=--push ## Build the latency prediction server image for local development and push it to registry.
-latency-prediction-image-local-push: latency-prediction-image-local-build
-
-.PHONY: latency-prediction-image-local-load
-latency-prediction-image-local-load: LOAD=--load ## Build the latency prediction server image for local development and load it in the local Docker registry.
-latency-prediction-image-local-load: latency-prediction-image-local-build
-
-.PHONY: latency-prediction-image-build
-latency-prediction-image-build: ## Build the latency prediction server image using Docker Buildx.
-	cd $(CURDIR)/latencypredictor && $(IMAGE_BUILD_CMD) -f Dockerfile-prediction -t $(LATENCY_PREDICTION_IMAGE_TAG) \
-		--platform=$(PLATFORMS) \
-		$(PUSH) \
-		$(LOAD) \
-		$(LATENCY_PREDICTION_IMAGE_BUILD_EXTRA_OPTS) ./
-
-.PHONY: latency-prediction-image-push
-latency-prediction-image-push: PUSH=--push ## Build the latency prediction server image and push it to registry.
-latency-prediction-image-push: latency-prediction-image-build
-
-.PHONY: latency-prediction-image-load
-latency-prediction-image-load: LOAD=--load ## Build the latency prediction server image and load it in the local Docker registry.
-latency-prediction-image-load: latency-prediction-image-build
-
-.PHONY: latency-prediction-image-kind
-latency-prediction-image-kind: latency-prediction-image-build ## Build the latency prediction server image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
-	kind load docker-image $(LATENCY_PREDICTION_IMAGE_TAG) --name $(KIND_CLUSTER)
-
-##@ Latency Prediction - Test Job Image
-
-.PHONY: latency-prediction-test-image-local-build
-latency-prediction-test-image-local-build: ## Build the latency prediction test image using Docker Buildx for local development.
-	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
-	$(MAKE) latency-prediction-test-image-build PUSH=$(PUSH)
-	$(MAKE) latency-prediction-test-image-build LOAD=$(LOAD)
-	$(DOCKER_BUILDX_CMD) rm $$BUILDER
-
-.PHONY: latency-prediction-test-image-local-push
-latency-prediction-test-image-local-push: PUSH=--push ## Build the latency prediction test image for local development and push it to registry.
-latency-prediction-test-image-local-push: latency-prediction-test-image-local-build
-
-.PHONY: latency-prediction-test-image-local-load
-latency-prediction-test-image-local-load: LOAD=--load ## Build the latency prediction test image for local development and load it in the local Docker registry.
-latency-prediction-test-image-local-load: latency-prediction-test-image-local-build
-
-.PHONY: latency-prediction-test-image-build
-latency-prediction-test-image-build: ## Build the latency prediction test image using Docker Buildx.
-	cd $(CURDIR)/latencypredictor && $(IMAGE_BUILD_CMD) -f Dockerfile-test -t $(LATENCY_PREDICTION_TEST_IMAGE_TAG) \
-		--platform=$(PLATFORMS) \
-		$(PUSH) \
-		$(LOAD) \
-		$(LATENCY_PREDICTION_TEST_IMAGE_BUILD_EXTRA_OPTS) ./
-
-.PHONY: latency-prediction-test-image-push
-latency-prediction-test-image-push: PUSH=--push ## Build the latency prediction test image and push it to registry.
-latency-prediction-test-image-push: latency-prediction-test-image-build
-
-.PHONY: latency-prediction-test-image-load
-latency-prediction-test-image-load: LOAD=--load ## Build the latency prediction test image and load it in the local Docker registry.
-latency-prediction-test-image-load: latency-prediction-test-image-build
-
-.PHONY: latency-prediction-test-image-kind
-latency-prediction-test-image-kind: latency-prediction-test-image-build ## Build the latency prediction test image and load it to kind cluster $KIND_CLUSTER ("kind" by default).
-	kind load docker-image $(LATENCY_PREDICTION_TEST_IMAGE_TAG) --name $(KIND_CLUSTER)
 
 ##@ Docs
 
@@ -479,14 +307,6 @@ install: generate kustomize ## Install CRDs into the K8s cluster specified in ~/
 uninstall: generate kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
-##@ Helm
-.PHONY: inferencepool-helm-chart-push
-inferencepool-helm-chart-push: yq helm-install
-	CHART=inferencepool EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
-
-.PHONY: standalone-helm-chart-push
-standalone-helm-chart-push: yq helm-install
-	CHART=standalone EXTRA_TAG="$(EXTRA_TAG)" IMAGE_REGISTRY="$(IMAGE_REGISTRY)" YQ="$(YQ)" HELM="$(HELM)" ./hack/push-chart.sh
 ##@ Release
 
 .PHONY: release-quickstart
@@ -524,13 +344,9 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 CRD_REF_DOCS ?= $(LOCALBIN)/crd-ref-docs
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 GOLANGCI_API_LINT = $(LOCALBIN)/golangci-kube-api-linter
-HELM = $(PROJECT_DIR)/bin/helm
 YQ = $(PROJECT_DIR)/bin/yq
 KUBECTL_VALIDATE = $(PROJECT_DIR)/bin/kubectl-validate
 GCI = $(LOCALBIN)/gci
-PROTOC ?= protoc
-PROTOC_GEN_GO = $(LOCALBIN)/protoc-gen-go
-PROTOC_GEN_GO_GRPC = $(LOCALBIN)/protoc-gen-go-grpc
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.3
@@ -538,11 +354,8 @@ CONTROLLER_TOOLS_VERSION ?= v0.19.0
 ENVTEST_VERSION ?= release-0.19
 CRD_REF_DOCS_VERSION ?= v0.2.0
 GOLANGCI_LINT_VERSION ?= v2.9.0
-HELM_VERSION ?= v3.17.1
 KUBECTL_VALIDATE_VERSION ?= v0.0.4
 GCI_VERSION ?= v0.13.6
-PROTOC_GEN_GO_VERSION ?= v1.34.2
-PROTOC_GEN_GO_GRPC_VERSION ?= v1.5.1
 YQ_VERSION ?= v4.45.1
 
 .PHONY: kustomize
@@ -575,19 +388,11 @@ golangci-api-lint: golangci-lint $(GOLANGCI_API_LINT) ## Download golangci-lint 
 $(GOLANGCI_API_LINT):
 	$(GOLANGCI_LINT) custom
 
-.PHONY: yq
-yq: ## Download yq locally if necessary.
-	GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on go install github.com/mikefarah/yq/v4@$(YQ_VERSION)
 
 .PHONY: tidy
 tidy:
 	go work sync
 	find . -name go.mod -execdir sh -c 'go mod tidy' \;
-
-.PHONY: helm-install
-helm-install: $(HELM) ## Download helm locally if necessary.
-$(HELM): $(LOCALBIN)
-	GOBIN=$(PROJECT_DIR)/bin GO111MODULE=on go install helm.sh/helm/v3/cmd/helm@$(HELM_VERSION)
 
 .PHONY: kubectl-validate
 kubectl-validate: $(KUBECTL_VALIDATE) ## Download kubectl-validate locally if necessary.
@@ -598,16 +403,6 @@ $(KUBECTL_VALIDATE): $(LOCALBIN)
 gci: $(GCI) ## Download gci locally if necessary.
 $(GCI): $(LOCALBIN)
 	$(call go-install-tool,$(GCI),github.com/daixiang0/gci,$(GCI_VERSION))
-
-.PHONY: protoc-gen-go
-protoc-gen-go: $(PROTOC_GEN_GO) ## Download protoc-gen-go locally if necessary.
-$(PROTOC_GEN_GO): $(LOCALBIN)
-	$(call go-install-tool,$(PROTOC_GEN_GO),google.golang.org/protobuf/cmd/protoc-gen-go,$(PROTOC_GEN_GO_VERSION))
-
-.PHONY: protoc-gen-go-grpc
-protoc-gen-go-grpc: $(PROTOC_GEN_GO_GRPC) ## Download protoc-gen-go-grpc locally if necessary.
-$(PROTOC_GEN_GO_GRPC): $(LOCALBIN)
-	$(call go-install-tool,$(PROTOC_GEN_GO_GRPC),google.golang.org/grpc/cmd/protoc-gen-go-grpc,$(PROTOC_GEN_GO_GRPC_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 # $1 - target path with name of binary

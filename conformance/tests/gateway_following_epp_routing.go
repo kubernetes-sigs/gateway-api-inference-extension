@@ -22,6 +22,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -32,8 +33,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/headers"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test"
 )
 
 func init() {
@@ -98,7 +99,7 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 						Method: http.MethodPost,
 						Body:   requestBody,
 						Headers: map[string]string{
-							test.HeaderTestEppEndPointSelectionKey: podIPs[i],
+							headers.HeaderTestEppEndPointSelectionKey: podIPs[i],
 						},
 					},
 					Response: gwhttp.Response{
@@ -135,11 +136,11 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				eppHeaderValue := strings.Join(tc.podIPsToBeReturnedByEPP, ",")
-				headers := map[string]string{
-					test.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
+				reqHeaders := map[string]string{
+					headers.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
 				}
 
-				t.Logf("Sending request to %s with EPP header '%s: %s'", gwAddr, test.HeaderTestEppEndPointSelectionKey, eppHeaderValue)
+				t.Logf("Sending request to %s with EPP header '%s: %s'", gwAddr, headers.HeaderTestEppEndPointSelectionKey, eppHeaderValue)
 				t.Logf("Expecting traffic to be routed to pod: %v", tc.expectAllRequestsRoutedWithinPodNames)
 
 				assertTrafficOnlyReachesToExpectedPods(t, s, gwAddr, gwhttp.ExpectedResponse{
@@ -148,7 +149,7 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 						Path:    path,
 						Method:  http.MethodPost,
 						Body:    requestBody,
-						Headers: headers,
+						Headers: reqHeaders,
 					},
 					Response: gwhttp.Response{
 						StatusCode: http.StatusOK,
@@ -170,23 +171,39 @@ func assertTrafficOnlyReachesToExpectedPods(t *testing.T, suite *suite.Conforman
 	var (
 		roundTripper = suite.RoundTripper
 		g            errgroup.Group
-		req          = gwhttp.MakeRequest(t, &expected, gwAddr, "HTTP", "http")
 	)
+	gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, roundTripper, suite.TimeoutConfig, gwAddr, expected)
 	g.SetLimit(concurrentRequests)
 	for i := 0; i < totalRequests; i++ {
 		g.Go(func() error {
-			cReq, cRes, err := roundTripper.CaptureRoundTrip(req)
-			if err != nil {
-				return fmt.Errorf("failed to roundtrip request: %w", err)
-			}
-			if err := gwhttp.CompareRoundTrip(t, &req, cReq, cRes, expected); err != nil {
-				return fmt.Errorf("response expectation failed for request: %w", err)
-			}
+			timeout := time.After(2 * time.Minute)
+			for {
+				req := gwhttp.MakeRequest(t, &expected, gwAddr, "HTTP", "http")
+				cReq, cRes, err := roundTripper.CaptureRoundTrip(req)
+				if err == nil {
+					compErr := gwhttp.CompareRoundTrip(t, &req, cReq, cRes, expected)
+					if compErr == nil {
+						if slices.Contains(expectedPodNames, cReq.Pod) {
+							return nil
+						}
+						return fmt.Errorf("request was handled by an unexpected pod %q", cReq.Pod)
+					}
+					if cRes != nil && (cRes.StatusCode == http.StatusNotFound || cRes.StatusCode == http.StatusServiceUnavailable) {
+						// Transient unconverged GFE instance; back off and retry
+					} else {
+						return fmt.Errorf("expectation failed: %w", compErr)
+					}
+				}
 
-			if slices.Contains(expectedPodNames, cReq.Pod) {
-				return nil
+				select {
+				case <-timeout:
+					if err != nil {
+						return fmt.Errorf("failed roundtrip after retries: %w", err)
+					}
+					return fmt.Errorf("expectation failed after retries")
+				case <-time.After(500 * time.Millisecond):
+				}
 			}
-			return fmt.Errorf("request was handled by an unexpected pod %q", cReq.Pod)
 		})
 	}
 	if err := g.Wait(); err != nil {

@@ -33,8 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/util/testing"
 )

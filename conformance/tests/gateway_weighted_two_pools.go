@@ -23,9 +23,11 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
@@ -34,8 +36,8 @@ import (
 
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
+	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/headers"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
-	"sigs.k8s.io/gateway-api-inference-extension/pkg/epp/framework/plugins/scheduling/test"
 )
 
 func init() {
@@ -114,27 +116,36 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		// should filter to endpoints that actually belong to its pool.
 		allIPs := append(append([]string{}, primaryPodIPs...), secondaryPodIPs...)
 		eppHeaderValue := strings.Join(allIPs, ",")
-		gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
-			t,
-			s.RoundTripper,
-			s.TimeoutConfig,
-			gwAddr,
-			gwhttp.ExpectedResponse{
-				Request: gwhttp.Request{
-					Host:   hostname,
-					Path:   path,
-					Method: http.MethodPost,
-					Body:   `{"model":"conformance-fake-model","prompt":"Warmup"}`,
-					Headers: map[string]string{
-						test.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
+
+		// Warm up every pod individually across both pools to guarantee that GFE
+		// backend health checks and NEGs for both pools are 100% healthy before kicking off concurrent traffic.
+		allPods := append(append([]corev1.Pod{}, primaryPods...), secondaryPods...)
+		for _, pod := range allPods {
+			pod := pod
+			t.Logf("Warming up pod %s (%s)", pod.Name, pod.Status.PodIP)
+			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
+				t,
+				s.RoundTripper,
+				s.TimeoutConfig,
+				gwAddr,
+				gwhttp.ExpectedResponse{
+					Request: gwhttp.Request{
+						Host:   hostname,
+						Path:   path,
+						Method: http.MethodPost,
+						Body:   `{"model":"conformance-fake-model","prompt":"Warmup"}`,
+						Headers: map[string]string{
+							headers.HeaderTestEppEndPointSelectionKey: pod.Status.PodIP + ":3000",
+						},
 					},
+					Response: gwhttp.Response{
+						StatusCodes: []int{http.StatusOK},
+					},
+					Backend:   pod.Name,
+					Namespace: resources.AppBackendNamespace,
 				},
-				Response: gwhttp.Response{
-					StatusCodes: []int{http.StatusOK},
-				},
-				Namespace: resources.AppBackendNamespace,
-			},
-		)
+			)
+		}
 
 		requestBody := `{
 			"model": "conformance-fake-model",
@@ -144,15 +155,15 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		// Build quick lookup sets for attributing each hit to a pool by backend pod name.
 		primarySet := sets.New(primaryPodNames...)
 		secondarySet := sets.New(secondaryPodNames...)
-		headers := map[string]string{
-			test.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
+		headersMap := map[string]string{
+			headers.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
 		}
 		expected := gwhttp.ExpectedResponse{
 			Request: gwhttp.Request{
 				Host:    hostname,
 				Path:    path,
 				Method:  http.MethodPost,
-				Headers: headers,
+				Headers: headersMap,
 				Body:    requestBody,
 			},
 			Response: gwhttp.Response{
@@ -160,7 +171,7 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 			},
 			Namespace: resources.AppBackendNamespace,
 		}
-		req := gwhttp.MakeRequest(t, &expected, gwAddr, "HTTP", "http")
+		gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gwAddr, expected)
 
 		var primaryHits, secondaryHits atomic.Int64
 		var g errgroup.Group
@@ -168,23 +179,38 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 
 		for range totalRequests {
 			g.Go(func() error {
-				cReq, cRes, err := s.RoundTripper.CaptureRoundTrip(req)
-				if err != nil {
-					return fmt.Errorf("failed to roundtrip request: %w", err)
-				}
-				if err := gwhttp.CompareRoundTrip(t, &req, cReq, cRes, expected); err != nil {
-					return fmt.Errorf("response expectation failed: %w", err)
-				}
+				timeout := time.After(2 * time.Minute)
+				for {
+					req := gwhttp.MakeRequest(t, &expected, gwAddr, "HTTP", "http")
+					cReq, cRes, err := s.RoundTripper.CaptureRoundTrip(req)
+					if err == nil {
+						compErr := gwhttp.CompareRoundTrip(t, &req, cReq, cRes, expected)
+						if compErr == nil {
+							if primarySet.Has(cReq.Pod) {
+								primaryHits.Add(1)
+								return nil
+							} else if secondarySet.Has(cReq.Pod) {
+								secondaryHits.Add(1)
+								return nil
+							}
+							return fmt.Errorf("request was handled by unexpected pod %q (not in either pool)", cReq.Pod)
+						}
+						if cRes != nil && (cRes.StatusCode == http.StatusNotFound || cRes.StatusCode == http.StatusServiceUnavailable) {
+							// Transient unconverged GFE instance; back off and retry
+						} else {
+							return fmt.Errorf("response expectation failed: %w", compErr)
+						}
+					}
 
-				// Attribute response to pool by backend pod name.
-				if primarySet.Has(cReq.Pod) {
-					primaryHits.Add(1)
-				} else if secondarySet.Has(cReq.Pod) {
-					secondaryHits.Add(1)
-				} else {
-					return fmt.Errorf("request was handled by unexpected pod %q (not in either pool)", cReq.Pod)
+					select {
+					case <-timeout:
+						if err != nil {
+							return fmt.Errorf("failed to roundtrip request after retries: %w", err)
+						}
+						return fmt.Errorf("response expectation failed after retries")
+					case <-time.After(500 * time.Millisecond):
+					}
 				}
-				return nil
 			})
 		}
 		require.NoError(t, g.Wait(), "requests failed")

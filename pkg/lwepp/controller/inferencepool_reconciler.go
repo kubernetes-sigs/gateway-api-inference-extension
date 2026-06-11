@@ -21,10 +21,10 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	logutil "sigs.k8s.io/gateway-api-inference-extension/pkg/common/observability/logging"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/datastore"
