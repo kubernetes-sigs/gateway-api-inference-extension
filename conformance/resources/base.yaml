@@ -164,11 +164,10 @@ spec:
         app: appprotocol-inference-model-server
     spec:
       containers:
-      - name: echoserver
+      - name: echoserver-http
         image: gcr.io/k8s-staging-gateway-api/echo-basic:v20251106-v1.3.0-263-g47c3435c
         ports:
         - containerPort: 3000
-        - containerPort: 3001
         readinessProbe:
           httpGet:
             path: /
@@ -179,6 +178,33 @@ spec:
         env:
         - name: HTTP_PORT
           value: "3000"
+        - name: H2C_PORT
+          value: "3002"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+      - name: echoserver-h2c
+        image: gcr.io/k8s-staging-gateway-api/echo-basic:v20251106-v1.3.0-263-g47c3435c
+        ports:
+        - containerPort: 3001
+        readinessProbe:
+          tcpSocket:
+            port: 3001
+          initialDelaySeconds: 3
+          periodSeconds: 5
+          failureThreshold: 2
+        env:
+        - name: HTTP_PORT
+          value: "3003"
         - name: H2C_PORT
           value: "3001"
         - name: POD_NAME
@@ -841,3 +867,21 @@ roleRef:
   kind: Role
   name: inference-model-reader
   apiGroup: rbac.authorization.k8s.io
+
+---
+# --- H2C Pool HealthCheckPolicy ---
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: appprotocol-h2c-health-check
+  namespace: inference-conformance-app-backend
+spec:
+  targetRef:
+    group: inference.networking.k8s.io
+    kind: InferencePool
+    name: appprotocol-h2c-inference-pool
+  default:
+    config:
+      type: TCP
+      tcpHealthCheck:
+        port: 3001
