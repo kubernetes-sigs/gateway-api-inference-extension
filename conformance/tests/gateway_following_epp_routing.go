@@ -22,6 +22,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -135,7 +136,7 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				eppHeaderValue := strings.Join(tc.podIPsToBeReturnedByEPP, ",")
-				headers := map[string]string{
+				reqHeaders := map[string]string{
 					headers.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
 				}
 
@@ -148,7 +149,7 @@ var GatewayFollowingEPPRouting = suite.ConformanceTest{
 						Path:    path,
 						Method:  http.MethodPost,
 						Body:    requestBody,
-						Headers: headers,
+						Headers: reqHeaders,
 					},
 					Response: gwhttp.Response{
 						StatusCode: http.StatusOK,
@@ -170,23 +171,39 @@ func assertTrafficOnlyReachesToExpectedPods(t *testing.T, suite *suite.Conforman
 	var (
 		roundTripper = suite.RoundTripper
 		g            errgroup.Group
-		req          = gwhttp.MakeRequest(t, &expected, gwAddr, "HTTP", "http")
 	)
+	gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, roundTripper, suite.TimeoutConfig, gwAddr, expected)
 	g.SetLimit(concurrentRequests)
 	for i := 0; i < totalRequests; i++ {
 		g.Go(func() error {
-			cReq, cRes, err := roundTripper.CaptureRoundTrip(req)
-			if err != nil {
-				return fmt.Errorf("failed to roundtrip request: %w", err)
-			}
-			if err := gwhttp.CompareRoundTrip(t, &req, cReq, cRes, expected); err != nil {
-				return fmt.Errorf("response expectation failed for request: %w", err)
-			}
+			timeout := time.After(2 * time.Minute)
+			for {
+				req := gwhttp.MakeRequest(t, &expected, gwAddr, "HTTP", "http")
+				cReq, cRes, err := roundTripper.CaptureRoundTrip(req)
+				if err == nil {
+					compErr := gwhttp.CompareRoundTrip(t, &req, cReq, cRes, expected)
+					if compErr == nil {
+						if slices.Contains(expectedPodNames, cReq.Pod) {
+							return nil
+						}
+						return fmt.Errorf("request was handled by an unexpected pod %q", cReq.Pod)
+					}
+					if cRes != nil && (cRes.StatusCode == http.StatusNotFound || cRes.StatusCode == http.StatusServiceUnavailable) {
+						// Transient unconverged GFE instance; back off and retry
+					} else {
+						return fmt.Errorf("expectation failed: %w", compErr)
+					}
+				}
 
-			if slices.Contains(expectedPodNames, cReq.Pod) {
-				return nil
+				select {
+				case <-timeout:
+					if err != nil {
+						return fmt.Errorf("failed roundtrip after retries: %w", err)
+					}
+					return fmt.Errorf("expectation failed after retries")
+				case <-time.After(500 * time.Millisecond):
+				}
 			}
-			return fmt.Errorf("request was handled by an unexpected pod %q", cReq.Pod)
 		})
 	}
 	if err := g.Wait(); err != nil {
