@@ -44,7 +44,7 @@ func TestValidateInferencePool(t *testing.T) {
 					"app": "model-server",
 				},
 			},
-			EndpointPickerRef: v1.EndpointPickerRef{
+			EndpointPickerRef: &v1.EndpointPickerRef{
 				Name: "epp",
 				Kind: "Service",
 				Port: &v1.Port{Number: 9002},
