@@ -1,3 +1,0 @@
-# HELP inference_pool_average_queue_size [ALPHA] The average number of requests pending in the model server queue.
-# TYPE inference_pool_average_queue_size gauge
-inference_pool_average_queue_size{name="p1"} 0.4

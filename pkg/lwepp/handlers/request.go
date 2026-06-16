@@ -28,7 +28,6 @@ import (
 
 	envoy "sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/datastore"
-
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/metadata"
 )
 

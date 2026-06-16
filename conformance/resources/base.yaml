@@ -249,23 +249,19 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lwepp:main
         imagePullPolicy: Always
         args:
         - --pool-name
         - "primary-inference-pool"
         - --pool-namespace
         - "inference-conformance-app-backend"
-        - --v
-        - "4"
         - --zap-encoder
         - "json"
         - --grpc-port
         - "9002"
         - --grpc-health-port
         - "9003"
-        - "--config-file"
-        - "/config/conformance-plugins.yaml"
         ports:
         - containerPort: 9002
         - containerPort: 9003
@@ -283,13 +279,6 @@ spec:
             service: inference-extension
           initialDelaySeconds: 5
           periodSeconds: 10
-        volumeMounts:
-        - name: plugins-config-volume
-          mountPath: "/config"
-      volumes:
-      - name: plugins-config-volume
-        configMap:
-          name: plugins-config
 ---
 # --- Secondary InferencePool Definition ---
 apiVersion: inference.networking.k8s.io/v1
@@ -347,23 +336,19 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lwepp:main
         imagePullPolicy: Always
         args:
         - --pool-name
         - "secondary-inference-pool"
         - --pool-namespace
         - "inference-conformance-app-backend"
-        - --v
-        - "4"
         - --zap-encoder
         - "json"
         - --grpc-port
         - "9002"
         - --grpc-health-port
         - "9003"
-        - "--config-file"
-        - "/config/conformance-plugins.yaml"
         ports:
         - containerPort: 9002
         - containerPort: 9003
@@ -381,13 +366,6 @@ spec:
             service: inference-extension
           initialDelaySeconds: 5
           periodSeconds: 10
-        volumeMounts:
-        - name: plugins-config-volume
-          mountPath: "/config"
-      volumes:
-      - name: plugins-config-volume
-        configMap:
-          name: plugins-config
 ---
 # --- Explicit HTTP appProtocol InferencePool Definition ---
 apiVersion: inference.networking.k8s.io/v1
@@ -445,23 +423,19 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lwepp:main
         imagePullPolicy: Always
         args:
         - --pool-name
         - "appprotocol-http-inference-pool"
         - --pool-namespace
         - "inference-conformance-app-backend"
-        - --v
-        - "4"
         - --zap-encoder
         - "json"
         - --grpc-port
         - "9002"
         - --grpc-health-port
         - "9003"
-        - "--config-file"
-        - "/config/conformance-plugins.yaml"
         ports:
         - containerPort: 9002
         - containerPort: 9003
@@ -479,13 +453,6 @@ spec:
             service: inference-extension
           initialDelaySeconds: 5
           periodSeconds: 10
-        volumeMounts:
-        - name: plugins-config-volume
-          mountPath: "/config"
-      volumes:
-      - name: plugins-config-volume
-        configMap:
-          name: plugins-config
 ---
 # --- H2C InferencePool Definition ---
 apiVersion: inference.networking.k8s.io/v1
@@ -543,23 +510,19 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lwepp:main
         imagePullPolicy: Always
         args:
         - --pool-name
         - "appprotocol-h2c-inference-pool"
         - --pool-namespace
         - "inference-conformance-app-backend"
-        - --v
-        - "4"
         - --zap-encoder
         - "json"
         - --grpc-port
         - "9002"
         - --grpc-health-port
         - "9003"
-        - "--config-file"
-        - "/config/conformance-plugins.yaml"
         ports:
         - containerPort: 9002
         - containerPort: 9003
@@ -577,13 +540,6 @@ spec:
             service: inference-extension
           initialDelaySeconds: 5
           periodSeconds: 10
-        volumeMounts:
-        - name: plugins-config-volume
-          mountPath: "/config"
-      volumes:
-      - name: plugins-config-volume
-        configMap:
-          name: plugins-config
 ---
 # -- Data Parallelism (DP) backend deployment: 3 pods, each listening on three ports to simulate ranks ---
 apiVersion: apps/v1
@@ -752,23 +708,19 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/epp:main
+        image: us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lwepp:main
         imagePullPolicy: Always
         args:
         - --pool-name
         - "dp-inference-pool"
         - --pool-namespace
         - "inference-conformance-app-backend"
-        - --v
-        - "4"
         - --zap-encoder
         - "json"
         - --grpc-port
         - "9002"
         - --grpc-health-port
         - "9003"
-        - "--config-file"
-        - "/config/conformance-plugins.yaml"
         ports:
         - containerPort: 9002
         - containerPort: 9003
@@ -786,30 +738,6 @@ spec:
             service: inference-extension
           initialDelaySeconds: 5
           periodSeconds: 10
-        volumeMounts:
-        - name: plugins-config-volume
-          mountPath: "/config"
-      volumes:
-      - name: plugins-config-volume
-        configMap:
-          name: plugins-config
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: plugins-config
-  namespace: inference-conformance-app-backend
-data:
-  conformance-plugins.yaml: |
-    apiVersion: inference.networking.x-k8s.io/v1alpha1
-    kind: EndpointPickerConfig
-    plugins:
-    - type: header-based-testing-filter
-    - type: destination-endpoint-served-verifier
-    schedulingProfiles:
-    - name: conformance-profile
-      plugins:
-      - pluginRef: header-based-testing-filter
 ---
 # --- Required Role and RoleBinding for Conformance Test for EPP ---
 apiVersion: rbac.authorization.k8s.io/v1
