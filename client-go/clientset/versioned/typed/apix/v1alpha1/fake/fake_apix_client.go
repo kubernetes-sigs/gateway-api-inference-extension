@@ -24,17 +24,17 @@ import (
 	v1alpha1 "sigs.k8s.io/gateway-api-inference-extension/client-go/clientset/versioned/typed/apix/v1alpha1"
 )
 
-type FakeInferenceV1alpha1 struct {
+type FakeXInferenceV1alpha1 struct {
 	*testing.Fake
 }
 
-func (c *FakeInferenceV1alpha1) InferencePoolImports(namespace string) v1alpha1.InferencePoolImportInterface {
+func (c *FakeXInferenceV1alpha1) InferencePoolImports(namespace string) v1alpha1.InferencePoolImportInterface {
 	return newFakeInferencePoolImports(c, namespace)
 }
 
 // RESTClient returns a RESTClient that is used to communicate
 // with API server by this client implementation.
-func (c *FakeInferenceV1alpha1) RESTClient() rest.Interface {
+func (c *FakeXInferenceV1alpha1) RESTClient() rest.Interface {
 	var ret *rest.RESTClient
 	return ret
 }

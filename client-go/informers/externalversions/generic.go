@@ -25,7 +25,6 @@ import (
 	cache "k8s.io/client-go/tools/cache"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1alpha1 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha1"
-	v1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
 // GenericInformer is type of SharedIndexInformer which will locate and delegate to other
@@ -61,12 +60,6 @@ func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource
 		// Group=inference.networking.x-k8s.io, Version=v1alpha1
 	case v1alpha1.SchemeGroupVersion.WithResource("inferencepoolimports"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.XInference().V1alpha1().InferencePoolImports().Informer()}, nil
-
-		// Group=inference.networking.x-k8s.io, Version=v1alpha2
-	case v1alpha2.SchemeGroupVersion.WithResource("inferencemodelrewrites"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.XInference().V1alpha2().InferenceModelRewrites().Informer()}, nil
-	case v1alpha2.SchemeGroupVersion.WithResource("inferenceobjectives"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.XInference().V1alpha2().InferenceObjectives().Informer()}, nil
 
 	}
 

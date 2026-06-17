@@ -24,10 +24,8 @@ import (
 	managedfields "k8s.io/apimachinery/pkg/util/managedfields"
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	v1alpha1 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha1"
-	v1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	apiv1 "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/api/v1"
 	apixv1alpha1 "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/apix/v1alpha1"
-	apixv1alpha2 "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/apix/v1alpha2"
 	internal "sigs.k8s.io/gateway-api-inference-extension/client-go/applyconfiguration/internal"
 )
 
@@ -62,30 +60,6 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apixv1alpha1.InferencePoolImportApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InferencePoolImportStatus"):
 		return &apixv1alpha1.InferencePoolImportStatusApplyConfiguration{}
-
-		// Group=inference.networking.x-k8s.io, Version=v1alpha2
-	case v1alpha2.SchemeGroupVersion.WithKind("InferenceModelRewrite"):
-		return &apixv1alpha2.InferenceModelRewriteApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("InferenceModelRewriteRule"):
-		return &apixv1alpha2.InferenceModelRewriteRuleApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("InferenceModelRewriteSpec"):
-		return &apixv1alpha2.InferenceModelRewriteSpecApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("InferenceModelRewriteStatus"):
-		return &apixv1alpha2.InferenceModelRewriteStatusApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("InferenceObjective"):
-		return &apixv1alpha2.InferenceObjectiveApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("InferenceObjectiveSpec"):
-		return &apixv1alpha2.InferenceObjectiveSpecApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("InferenceObjectiveStatus"):
-		return &apixv1alpha2.InferenceObjectiveStatusApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("Match"):
-		return &apixv1alpha2.MatchApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("ModelMatch"):
-		return &apixv1alpha2.ModelMatchApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("PoolObjectReference"):
-		return &apixv1alpha2.PoolObjectReferenceApplyConfiguration{}
-	case v1alpha2.SchemeGroupVersion.WithKind("TargetModel"):
-		return &apixv1alpha2.TargetModelApplyConfiguration{}
 
 	}
 	return nil
