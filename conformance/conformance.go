@@ -46,7 +46,6 @@ import (
 	gatewayfeatures "sigs.k8s.io/gateway-api/pkg/features"
 
 	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/resources"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/tests"
 	inferenceconfig "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/config"
@@ -91,8 +90,6 @@ func DefaultOptions(t *testing.T) confsuite.ConformanceOptions {
 	require.NoError(t, apiextensionsv1.AddToScheme(scheme), "failed to add apiextensionsv1 types to scheme")
 
 	// Register Inference Extension API types
-	t.Logf("Attempting to install inferencev1alpha2 types into scheme from package: %s", inferencev1alpha2.GroupName)
-	require.NoError(t, inferencev1alpha2.Install(scheme), "failed to install inferencev1alpha2 types into scheme")
 	t.Logf("Attempting to install inferencev1 types into scheme from package: %s", inferencev1.GroupName)
 	require.NoError(t, inferencev1.Install(scheme), "failed to install inferencev1 types into scheme")
 

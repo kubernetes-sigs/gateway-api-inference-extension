@@ -28,10 +28,10 @@ import (
 // fakeInferencePoolImports implements InferencePoolImportInterface
 type fakeInferencePoolImports struct {
 	*gentype.FakeClientWithListAndApply[*v1alpha1.InferencePoolImport, *v1alpha1.InferencePoolImportList, *apixv1alpha1.InferencePoolImportApplyConfiguration]
-	Fake *FakeInferenceV1alpha1
+	Fake *FakeXInferenceV1alpha1
 }
 
-func newFakeInferencePoolImports(fake *FakeInferenceV1alpha1, namespace string) typedapixv1alpha1.InferencePoolImportInterface {
+func newFakeInferencePoolImports(fake *FakeXInferenceV1alpha1, namespace string) typedapixv1alpha1.InferencePoolImportInterface {
 	return &fakeInferencePoolImports{
 		gentype.NewFakeClientWithListAndApply[*v1alpha1.InferencePoolImport, *v1alpha1.InferencePoolImportList, *apixv1alpha1.InferencePoolImportApplyConfiguration](
 			fake.Fake,

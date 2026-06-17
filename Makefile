@@ -267,7 +267,7 @@ live-docs:
 	docker run --rm -it -p 3000:3000 -v ${PWD}:/docs gaie/mkdocs
 
 .PHONY: api-ref-docs-all
-api-ref-docs-all: apix-v1a1-ref-docs apix-v1a2-ref-docs api-ref-docs
+api-ref-docs-all: apix-v1a1-ref-docs api-ref-docs
 
 .PHONY: apix-v1a1-ref-docs
 apix-v1a1-ref-docs: crd-ref-docs
@@ -276,14 +276,6 @@ apix-v1a1-ref-docs: crd-ref-docs
 		--config=crd-ref-docs.yaml \
 		--renderer=markdown \
 		--output-path=${PWD}/site-src/reference/x-v1a1-spec.md
-
-.PHONY: apix-v1a2-ref-docs
-apix-v1a2-ref-docs: crd-ref-docs
-	${CRD_REF_DOCS} \
-		--source-path=${PWD}/apix/v1alpha2 \
-		--config=crd-ref-docs.yaml \
-		--renderer=markdown \
-		--output-path=${PWD}/site-src/reference/x-v1a2-spec.md
 
 .PHONY: api-ref-docs
 api-ref-docs: crd-ref-docs

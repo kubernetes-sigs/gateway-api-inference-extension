@@ -31,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
 	inferencev1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
-	inferencev1alpha2 "sigs.k8s.io/gateway-api-inference-extension/apix/v1alpha2"
 )
 
 var k8sClient client.Client
@@ -43,7 +42,6 @@ func TestMain(m *testing.M) {
 	var err error
 
 	_ = inferencev1.Install(scheme)
-	_ = inferencev1alpha2.Install(scheme)
 
 	// Add core APIs in case we refer secrets, services and configmaps
 	_ = corev1.AddToScheme(scheme)

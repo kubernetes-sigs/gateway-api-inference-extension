@@ -14,7 +14,7 @@ in a higher level **AI Gateways** like [LiteLLM](https://www.litellm.ai/), [Gloo
 
 ## API Resources
 
-Gateway API Inference Extension introduces two inference-focused API resources with distinct responsibilities, 
+Gateway API Inference Extension introduces inference-focused API resources with distinct responsibilities, 
 each aligning with a specific user persona in the Generative AI serving workflow.
 
 <img src="/images/inference-overview.svg" alt="Overview of API integration" class="center" width="1000" />
@@ -23,6 +23,6 @@ each aligning with a specific user persona in the Generative AI serving workflow
 
 InferencePool represents a set of Inference-focused Pods and an extension that will be used to route to them. Within the broader Gateway API resource model, this resource is considered a "backend". In practice, that means that you'd replace a Kubernetes Service with an InferencePool. This resource has some similarities to Service (a way to select Pods and specify a port), but has some unique capabilities. With InferencePool, you can configure a routing extension as well as inference-specific routing optimizations. For more information on this resource, refer to our [InferencePool documentation](/api-types/inferencepool) or go directly to the [InferencePool spec](/reference/spec/#inferencepool).
 
-### InferenceObjective
+### InferencePoolImport
 
-An InferenceObjective represents the objectives of a specific request. A single InferenceObjective is associated with a request, and multiple requests with different InferenceObjectives can be attached to an InferencePool. For more information on this resource, refer to our [InferenceObjective documentation](/api-types/inferenceobjective) or go directly to the [InferenceObjective spec](/reference/spec/#inferenceobjective).
+The `InferencePoolImport` resource is a cluster-local, controller-managed representation of an imported `InferencePool` from another cluster, allowing traffic to be routed to model servers running in a remote cluster. Unlike `InferencePool`, it is not user-authored but populated by the multi-cluster controller. For more information on this resource, refer to our [InferencePoolImport documentation](/api-types/inferencepoolimport) or go directly to the [InferencePoolImport spec](/reference/x-v1a1-spec/#inferencepoolimport).

@@ -60,7 +60,7 @@ type inferencePoolImports struct {
 }
 
 // newInferencePoolImports returns a InferencePoolImports
-func newInferencePoolImports(c *InferenceV1alpha1Client, namespace string) *inferencePoolImports {
+func newInferencePoolImports(c *XInferenceV1alpha1Client, namespace string) *inferencePoolImports {
 	return &inferencePoolImports{
 		gentype.NewClientWithListAndApply[*apixv1alpha1.InferencePoolImport, *apixv1alpha1.InferencePoolImportList, *applyconfigurationapixv1alpha1.InferencePoolImportApplyConfiguration](
 			"inferencepoolimports",
