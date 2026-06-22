@@ -235,7 +235,7 @@ You should see output listing the inference-related CRDs.
    Set the chart version and then select a tab to follow the provider-specific instructions.
 
    ```bash
-   export IGW_CHART_VERSION=v0
+   export IGW_CHART_VERSION=v1.5.0
    ```
 
 --8<-- "site-src/_includes/epp-latest.md"

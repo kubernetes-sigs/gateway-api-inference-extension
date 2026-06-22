@@ -78,14 +78,14 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
       # Install the Inference Extension CRDs
       kubectl apply -k https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd
 
-      export STANDALONE_CHART_VERSION=v0
+      export STANDALONE_CHART_VERSION=v1.5.0
       export PROVIDER=<YOUR_PROVIDER> # optional, can be gke if you need GKE-specific monitoring resources
       helm install vllm-qwen3-32b-standalone \
       --dependency-update \
       --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
       --set provider.name=$PROVIDER \
       --version $STANDALONE_CHART_VERSION \
-      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/standalone
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/standalone
       ```
 
       **Without Inference APIs Support**
@@ -95,7 +95,7 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
       along with provider-specific resources.
 
       ```bash
-      export STANDALONE_CHART_VERSION=v0
+      export STANDALONE_CHART_VERSION=v1.5.0
       export PROVIDER=<YOUR_PROVIDER> # optional, can be gke if you need GKE-specific monitoring resources
       helm install vllm-qwen3-32b-standalone \
       --dependency-update \
@@ -103,7 +103,7 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
       --set inferenceExtension.endpointsServer.createInferencePool=false \
       --set provider.name=$PROVIDER \
       --version $STANDALONE_CHART_VERSION \
-      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/standalone
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/standalone
       ```
 
 === "Agentgateway"
@@ -119,7 +119,7 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
       Example install:
 
       ```bash
-      export STANDALONE_CHART_VERSION=v0
+      export STANDALONE_CHART_VERSION=v1.5.0
       export PROVIDER=<YOUR_PROVIDER> # optional, can be gke if you need GKE-specific monitoring resources
       helm install vllm-qwen3-32b-standalone \
       --dependency-update \
@@ -129,7 +129,7 @@ Choose one of the following proxy options to deploy an Endpoint Picker Extension
       --set-string inferenceExtension.flags.secure-serving=false \
       --set provider.name=$PROVIDER \
       --version $STANDALONE_CHART_VERSION \
-      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/standalone
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/standalone
       ```
 
 #### Try it out
