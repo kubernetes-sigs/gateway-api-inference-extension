@@ -249,11 +249,6 @@ Deploy the sample InferenceObjective which allows you to specify priority of req
 
 --8<-- "site-src/_includes/bbr.md"
 
-### Next Steps: Advanced Features
-
-You have now deployed a basic Inference Gateway with a simple routing strategy. To explore more advanced features, such as latency-based routing, please refer to the following guide:
-
-*   [Latency-Based Routing](https://gateway-api-inference-extension.sigs.k8s.io/guides/latency-based-predictor.md)
 
 ### Cleanup
 

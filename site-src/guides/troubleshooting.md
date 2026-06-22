@@ -106,9 +106,6 @@ This mismatch causes the EPP to fundamentally misunderstand the caching behavior
 *   **v1.2+**: We recommend using the auto-tuning capability, which automatically syncs configuration with the model server. This feature is currently only supported for model servers that expose the required memory block metrics (e.g., vLLM). It is not currently supported for `sglang` because the necessary metrics regarding memory blocks (`Block Size` and `Number of GPU Blocks`) are not yet exposed.
 *   **v1.1 and earlier**: Ensure that your prefix cache scorer parameters are manually tuned to match your model server's settings. You can override these in your `values.yaml` by providing a custom plugin configuration that matches your existing profile structure:
 
-#### Example: Classic Routing (Latency Predictor Disabled)
-Use this if you are using the default queue and cache-based scorers.
-
 ```yaml
 inferenceExtension:
   pluginsConfigFile: "custom-plugins.yaml"
@@ -133,30 +130,6 @@ inferenceExtension:
           weight: 2
         - pluginRef: prefix-cache-scorer
           weight: 3
-```
-
-#### Example: Latency-Based Routing Enabled
-Use this if `inferenceExtension.latencyPredictor.enabled` is set to `true`. See the [Latency-Based Request Scheduling guide](./latency-based-predictor.md) for details on the plugins used below.
-
-```yaml
-inferenceExtension:
-  pluginsConfigFile: "custom-plugins.yaml"
-  pluginsCustomConfig:
-    custom-plugins.yaml: |
-      apiVersion: inference.networking.x-k8s.io/v1alpha1
-      kind: EndpointPickerConfig
-      plugins:
-      - type: predicted-latency-producer
-      - type: prefix-cache-affinity-filter
-      - type: latency-scorer
-      - type: weighted-random-picker
-      schedulingProfiles:
-      - name: default
-        plugins:
-        - pluginRef: predicted-latency-producer
-        - pluginRef: prefix-cache-affinity-filter
-        - pluginRef: latency-scorer
-        - pluginRef: weighted-random-picker
 ```
 
 See the [Prefix Cache Aware Plugin Customization](https://gateway-api-inference-extension.sigs.k8s.io/guides/epp-configuration/prefix-aware/#customize-the-prefix-cache-plugin) for a detailed explanation of each parameter.
