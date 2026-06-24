@@ -30,44 +30,15 @@ TARGETARCH ?= $(shell go env GOARCH)
 PLATFORMS ?= linux/$(TARGETARCH)
 DOCKER_BUILDX_CMD ?= docker buildx
 IMAGE_BUILD_CMD ?= $(DOCKER_BUILDX_CMD) build
-IMAGE_BUILD_EXTRA_OPTS ?=
 LWEPP_IMAGE_BUILD_EXTRA_OPTS ?=
-LATENCY_TRAINING_IMAGE_BUILD_EXTRA_OPTS ?=
-LATENCY_PREDICTION_IMAGE_BUILD_EXTRA_OPTS ?=
-LATENCY_PREDICTION_TEST_IMAGE_BUILD_EXTRA_OPTS ?=
+PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
+
 STAGING_IMAGE_REGISTRY ?= us-central1-docker.pkg.dev/k8s-staging-images
 IMAGE_REGISTRY ?= $(STAGING_IMAGE_REGISTRY)/gateway-api-inference-extension
-IMAGE_NAME := epp
-IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(IMAGE_NAME)
-IMAGE_TAG ?= $(IMAGE_REPO):$(GIT_TAG)
-PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
-# The path to the E2E manifest file. It can be overridden by setting the
-# E2E_MANIFEST_PATH environment variable. Note that HF_TOKEN must be set when using the GPU-based manifest.
-E2E_MANIFEST_PATH ?= config/manifests/vllm/sim-deployment.yaml
-# E2E_IMAGE specifies the image to be used when running e2e tests using make test-e2e.
-# it defaults to current image tag, but can be overwritten to test specific tags, releases, etc.
-E2E_IMAGE ?= $(IMAGE_TAG)
-# E2E_USE_KIND is a flag used in test-e2e target. when set to true it will load the e2e image into the kind cluster.
-# it is possible though to run e2e tests against clusters other than kind. in such a case, it is the user's responsibility to load
-# the image into the cluster.
-E2E_USE_KIND ?= true
 
 LWEPP_IMAGE_NAME := lwepp
 LWEPP_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(LWEPP_IMAGE_NAME)
 LWEPP_IMAGE_TAG ?= $(LWEPP_IMAGE_REPO):$(GIT_TAG)
-
-LATENCY_TRAINING_IMAGE_NAME := latency-training-server
-LATENCY_TRAINING_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(LATENCY_TRAINING_IMAGE_NAME)
-LATENCY_TRAINING_IMAGE_TAG ?= $(LATENCY_TRAINING_IMAGE_REPO):$(GIT_TAG)
-
-LATENCY_PREDICTION_IMAGE_NAME := latency-prediction-server
-LATENCY_PREDICTION_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(LATENCY_PREDICTION_IMAGE_NAME)
-LATENCY_PREDICTION_IMAGE_TAG ?= $(LATENCY_PREDICTION_IMAGE_REPO):$(GIT_TAG)
-
-LATENCY_PREDICTION_TEST_IMAGE_NAME := latency-prediction-test
-LATENCY_PREDICTION_TEST_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(LATENCY_PREDICTION_TEST_IMAGE_NAME)
-LATENCY_PREDICTION_TEST_IMAGE_TAG ?= $(LATENCY_PREDICTION_TEST_IMAGE_REPO):$(GIT_TAG)
-
 BASE_IMAGE ?= gcr.io/distroless/static:nonroot
 BUILDER_IMAGE ?= golang:1.25
 ifdef GO_VERSION
@@ -76,19 +47,11 @@ endif
 
 BUILD_REF ?= $(shell git describe --tags --match '$(ROOT_RELEASE_TAG_MATCH)' --abbrev=0 2>/dev/null)
 ifdef EXTRA_TAG
-IMAGE_EXTRA_TAG ?= $(IMAGE_REPO):$(EXTRA_TAG)
 LWEPP_IMAGE_EXTRA_TAG ?= $(LWEPP_IMAGE_REPO):$(EXTRA_TAG)
-LATENCY_TRAINING_IMAGE_EXTRA_TAG ?= $(LATENCY_TRAINING_IMAGE_REPO):$(EXTRA_TAG)
-LATENCY_PREDICTION_IMAGE_EXTRA_TAG ?= $(LATENCY_PREDICTION_IMAGE_REPO):$(EXTRA_TAG)
-LATENCY_PREDICTION_TEST_IMAGE_EXTRA_TAG ?= $(LATENCY_PREDICTION_TEST_IMAGE_REPO):$(EXTRA_TAG)
 BUILD_REF = $(EXTRA_TAG)
 endif
-ifdef IMAGE_EXTRA_TAG
-IMAGE_BUILD_EXTRA_OPTS += -t $(IMAGE_EXTRA_TAG)
+ifdef LWEPP_IMAGE_EXTRA_TAG
 LWEPP_IMAGE_BUILD_EXTRA_OPTS += -t $(LWEPP_IMAGE_EXTRA_TAG)
-LATENCY_TRAINING_IMAGE_BUILD_EXTRA_OPTS += -t $(LATENCY_TRAINING_IMAGE_EXTRA_TAG)
-LATENCY_PREDICTION_IMAGE_BUILD_EXTRA_OPTS += -t $(LATENCY_PREDICTION_IMAGE_EXTRA_TAG)
-LATENCY_PREDICTION_TEST_IMAGE_BUILD_EXTRA_OPTS += -t $(LATENCY_PREDICTION_TEST_IMAGE_EXTRA_TAG)
 endif
 
 
@@ -191,22 +154,6 @@ verify-crds: kubectl-validate
 verify-all:
 	hack/verify-all.sh -v
 
-##@ Build
-
-# Build the container image
-.PHONY: image-local-build
-image-local-build: ## Build the EPP image using Docker Buildx for local development.
-	BUILDER=$(shell $(DOCKER_BUILDX_CMD) create --use)
-	$(MAKE) image-build PUSH=$(PUSH)
-	$(MAKE) image-build LOAD=$(LOAD)
-	$(DOCKER_BUILDX_CMD) rm $$BUILDER
-
-.PHONY: image-local-push
-image-local-push: PUSH=--push ## Build the EPP image for local development and push it to $IMAGE_REPO.
-image-local-push: image-local-build
-
-# Build the container image
-
 ##@ Lightweight EPP
 
 # Build the container image
@@ -218,7 +165,7 @@ lwepp-image-local-build: ## Build the image using Docker Buildx for local develo
 	$(DOCKER_BUILDX_CMD) rm $$BUILDER
 
 .PHONY: lwepp-image-local-push
-lwepp-image-local-push: PUSH=--push ## Build the image for local development and push it to $IMAGE_REPO.
+lwepp-image-local-push: PUSH=--push ## Build the image for local development and push it to $LWEPP_IMAGE_REPO.
 lwepp-image-local-push: lwepp-image-local-build
 
 .PHONY: lwepp-image-local-load
@@ -238,7 +185,7 @@ lwepp-image-build: ## Build the image using Docker Buildx.
 		$(LWEPP_IMAGE_BUILD_EXTRA_OPTS) ./
 
 .PHONY: lwepp-image-push
-lwepp-image-push: PUSH=--push ## Build the image and push it to $IMAGE_REPO.
+lwepp-image-push: PUSH=--push ## Build the image and push it to $LWEPP_IMAGE_REPO.
 lwepp-image-push: lwepp-image-build
 
 .PHONY: lwepp-image-load

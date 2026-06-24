@@ -27,20 +27,20 @@ Our conversations are currently split between the following Kubernetes Slack cha
 
 ## Meetings
 
-Community meetings have moved to the llm-d Inference Scheduler community
-meeting. See the [llm-d Inference Scheduler contributing
-section](https://github.com/llm-d/llm-d-inference-scheduler/blob/main/README.md#contributing)
+Community meetings have moved to the llm-d Router community
+meeting. See the [llm-d Router contributing
+section](https://github.com/llm-d/llm-d-router/blob/main/README.md#contributing)
 for current meeting details.
 
 ### Meeting Notes and Recordings
 
 Meeting agendas, notes, and access information are maintained by the [llm-d
-Inference Scheduler](https://github.com/llm-d/llm-d-inference-scheduler/blob/main/README.md#contributing).
+Router](https://github.com/llm-d/llm-d-router/blob/main/README.md#contributing).
 
 ### Historical Meeting Assets
 
 The following assets are retained for historical purposes only. Current meeting
-details, agendas, and notes are maintained by the llm-d Inference Scheduler.
+details, agendas, and notes are maintained by the llm-d Router.
 
 The legacy Gateway API Inference Extension community meeting was held every
 Thursday at 10am Pacific Time. Invites were shared through the [WG-Serving

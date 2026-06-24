@@ -5,7 +5,7 @@ Gateway API Inference Extension optimizes self-hosting Generative AI Models on K
 It provides optimized load-balancing for self-hosted Generative AI Models on Kubernetes.
 The project’s goal is to improve and standardize routing to inference workloads across the ecosystem.
 
-This is achieved by leveraging Envoy's [External Processing](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) to extend any gateway that supports both ext-proc and [Gateway API](https://github.com/kubernetes-sigs/gateway-api) into an [inference gateway](../index.md#concepts-and-definitions).
+This is achieved by leveraging Envoy's [External Processing Protocol](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) to extend any gateway that supports both ext-proc and [Gateway API](https://github.com/kubernetes-sigs/gateway-api) into an [inference gateway](../index.md#concepts-and-definitions).
 This extension extends popular gateways like Envoy Gateway, kgateway, and GKE Gateway - to become [Inference Gateway](../index.md#concepts-and-definitions) -
 supporting inference platform teams self-hosting Generative Models (with a current focus on large language models) on Kubernetes.
 This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat)
