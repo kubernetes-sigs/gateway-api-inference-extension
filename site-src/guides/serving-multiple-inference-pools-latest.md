@@ -20,7 +20,7 @@ The BBR extracts the model name from the request body, does a lookup of the base
 ### Deploy Body-Based Routing Extension
 
    ```bash
-   export CHART_VERSION=v0
+   export CHART_VERSION=v1.5.0
    ```
 
 === "GKE"
@@ -30,7 +30,7 @@ The BBR extracts the model name from the request body, does a lookup of the base
       helm install body-based-router \
       --set provider.name=$GATEWAY_PROVIDER \
       --version $CHART_VERSION \
-      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/body-based-routing
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/body-based-routing
       ```
 
 === "Istio"
@@ -40,7 +40,7 @@ The BBR extracts the model name from the request body, does a lookup of the base
       helm install body-based-router \
       --set provider.name=$GATEWAY_PROVIDER \
       --version $CHART_VERSION \
-      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/body-based-routing
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/body-based-routing
       ```
 
 === "Agentgateway"
@@ -75,7 +75,7 @@ The BBR extracts the model name from the request body, does a lookup of the base
       ```bash
       helm install body-based-router \
       --version $CHART_VERSION \
-      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/body-based-routing
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/body-based-routing
       ```
 
 ### Serving a Second Model Server
@@ -97,7 +97,7 @@ base model that should be associated with the `InferencePool`.
 Set the Helm chart version (unless already set).
 
    ```bash
-   export IGW_CHART_VERSION=v0
+   export IGW_CHART_VERSION=v1.5.0
    ```
 
 === "GKE"
@@ -111,7 +111,7 @@ Set the Helm chart version (unless already set).
       --set experimentalHttpRoute.enabled=true \
       --set experimentalHttpRoute.baseModel=deepseek/DeepSeek-r1 \
       --version $IGW_CHART_VERSION \
-      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
 === "Istio"
@@ -125,7 +125,7 @@ Set the Helm chart version (unless already set).
       --set experimentalHttpRoute.enabled=true \
       --set experimentalHttpRoute.baseModel=deepseek/DeepSeek-r1 \
       --version $IGW_CHART_VERSION \
-      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
 === "Agentgateway"
@@ -139,7 +139,7 @@ Set the Helm chart version (unless already set).
     --set experimentalHttpRoute.enabled=true \
     --set experimentalHttpRoute.baseModel=deepseek/DeepSeek-r1 \
     --version $IGW_CHART_VERSION \
-    oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
+    oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
     ```
 
 === "Other"
@@ -151,7 +151,7 @@ Set the Helm chart version (unless already set).
       --set experimentalHttpRoute.enabled=true \
       --set experimentalHttpRoute.baseModel=deepseek/DeepSeek-r1 \
       --version $IGW_CHART_VERSION \
-      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
 After the installation, verify that you have two `InferencePools` and two EPP pods, one per base model type, running without errors
@@ -178,7 +178,7 @@ Run `helm upgrade` in order to update in place the HttpRoute mapping of the firs
 
       ```bash
       export GATEWAY_PROVIDER=gke
-      helm upgrade vllm-qwen3-32b oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
+      helm upgrade vllm-qwen3-32b oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool \
       --dependency-update \
       --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
       --set provider.name=$GATEWAY_PROVIDER \
@@ -191,7 +191,7 @@ Run `helm upgrade` in order to update in place the HttpRoute mapping of the firs
 
       ```bash
       export GATEWAY_PROVIDER=istio
-      helm upgrade vllm-qwen3-32b oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
+      helm upgrade vllm-qwen3-32b oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool \
       --dependency-update \
       --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
       --set provider.name=$GATEWAY_PROVIDER \
@@ -204,7 +204,7 @@ Run `helm upgrade` in order to update in place the HttpRoute mapping of the firs
 
       ```bash
       export GATEWAY_PROVIDER=none
-      helm upgrade vllm-qwen3-32b oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
+      helm upgrade vllm-qwen3-32b oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool \
       --dependency-update \
       --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
       --set provider.name=$GATEWAY_PROVIDER \
@@ -216,7 +216,7 @@ Run `helm upgrade` in order to update in place the HttpRoute mapping of the firs
 === "Other"
 
       ```bash
-      helm upgrade vllm-qwen3-32b oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool \
+      helm upgrade vllm-qwen3-32b oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool \
       --dependency-update \
       --set inferencePool.modelServers.matchLabels.app=vllm-qwen3-32b \
       --set experimentalHttpRoute.enabled=true \

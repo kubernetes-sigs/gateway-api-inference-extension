@@ -10,7 +10,7 @@
       --set inferencePool.modelServerProtocol=${MODEL_SERVER_PROTOCOL} \
       --set experimentalHttpRoute.enabled=true \
       --version $IGW_CHART_VERSION \
-      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
 === "Istio"
@@ -24,7 +24,7 @@
       --set inferencePool.modelServerType=${MODEL_SERVER} \
       --set experimentalHttpRoute.enabled=true \
       --version $IGW_CHART_VERSION \
-      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
 === "Agentgateway"
@@ -38,7 +38,7 @@
       --set inferencePool.modelServerType=${MODEL_SERVER} \
       --set experimentalHttpRoute.enabled=true \
       --version $IGW_CHART_VERSION \
-      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
 
 === "NGINX Gateway Fabric"
@@ -52,5 +52,5 @@
       --set inferencePool.modelServerType=${MODEL_SERVER} \
       --set experimentalHttpRoute.enabled=true \
       --version $IGW_CHART_VERSION \
-      oci://us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/charts/inferencepool
+      oci://registry.k8s.io/gateway-api-inference-extension/charts/inferencepool
       ```
