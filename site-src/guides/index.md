@@ -181,18 +181,7 @@ You should see output listing the inference-related CRDs.
       1. Deploy the Inference Gateway:
 
          ```bash
-         cat <<'EOF' | kubectl apply -f -
-         apiVersion: gateway.networking.k8s.io/v1
-         kind: Gateway
-         metadata:
-           name: inference-gateway
-         spec:
-           gatewayClassName: agentgateway
-           listeners:
-           - name: http
-             port: 80
-             protocol: HTTP
-         EOF
+         kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api-inference-extension/refs/tags/${IGW_LATEST_RELEASE}/config/manifests/gateway/agentgateway/gateway.yaml
          ```
 
       1. Confirm that the Gateway was assigned an IP address and reports a `Programmed=True` status:
