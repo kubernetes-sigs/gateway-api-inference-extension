@@ -15,7 +15,7 @@ Inference Gateway has partnered with vLLM to accelerate LLM serving optimization
 
 > [!IMPORTANT]
 > The Endpoint Picker (EPP), InferenceObjective and InferenceModelRewrite APIs, and Body Based Router (BBR) packages have moved to new repositories:
-> - EPP and associated APIs: [llm-d/llm-d-inference-scheduler](https://github.com/llm-d/llm-d-inference-scheduler)
+> - EPP and associated APIs: [llm-d/llm-d-router](https://github.com/llm-d/llm-d-router)
 > - BBR: [llm-d/llm-d-inference-payload-processor](https://github.com/llm-d/llm-d-inference-payload-processor)
 >
 > No new code will be accepted to these packages in this repository, and they will be archived soon. This move was proposed and discussed in [issue #2430](https://github.com/kubernetes-sigs/gateway-api-inference-extension/issues/2430).
@@ -37,9 +37,11 @@ The following specific terms to this project:
 - **Metrics and Capabilities**: Data provided by model serving platforms about
   performance, availability and capabilities to optimize routing. Includes
   things like [Prefix Cache] status or [LoRA Adapters] availability.
-- **Endpoint Picker(EPP)**: An implementation of an `Inference Scheduler` with additional Routing, Flow, and Request Control layers to allow for sophisticated routing strategies. Additional info on the architecture of the EPP [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
-- **Body Based Router(BBR)**: An optional additional [ext-proc](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) server that parses the http body of the inference prompt message and extracts information (currently the model name for OpenAI API style messages) into a format which can then be used by the gateway for routing purposes. Additional info [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/bbr/README.md) and in the documentation [user guides](https://gateway-api-inference-extension.sigs.k8s.io/guides/). 
- 
+- **Endpoint Picker (EPP)**: A data-plane component that communicates via the
+  [Envoy external processing protocol](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter),
+  and acts as the `Router`. It intercepts incoming inference requests and routes
+  each request to the optimal model server replica. This repository provides a
+  reference **Lightweight Endpoint Picker (lwepp)** for conformance test purposes.
 
 The following are key industry terms that are important to understand for
 this project:
@@ -83,7 +85,7 @@ The Inference Gateway:
 
 ### Model Server Integration
 
-IGW’s pluggable architecture was leveraged to enable the [llm-d Inference Scheduler](https://github.com/llm-d/llm-d-inference-scheduler).  
+IGW’s pluggable architecture was leveraged to enable the [llm-d Router](https://github.com/llm-d/llm-d-router).  
 
 Llm-d customizes vLLM & IGW to create a disaggregated serving solution. We've worked closely with this team to enable this integration. IGW will continue to work closely with llm-d to generalize the disaggregated serving plugin(s), & set a standard for disaggregated serving to be used across any [protocol-adherent](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-model-server-protocol) model server. 
 
@@ -115,20 +117,16 @@ As Inference Gateway builds towards a GA release. We will continue to expand our
 1. Heterogeneous accelerators - serve workloads on multiple types of accelerator using latency and request cost-aware load balancing
 1. Disaggregated serving support with independently scaling pools
 
-## End-to-End Tests
-
-Follow this [README](./test/e2e/epp/README.md) to learn more about running the inference-extension end-to-end test suite on your cluster.
-
 ## Contributing
 
-Community meetings have moved to the llm-d Inference Scheduler community
-meeting. See the [llm-d Inference Scheduler contributing
-section](https://github.com/llm-d/llm-d-inference-scheduler/blob/main/README.md#contributing)
+Community meetings have moved to the llm-d Router community
+meeting. See the [llm-d Router contributing
+section](https://github.com/llm-d/llm-d-router/blob/main/README.md#contributing)
 for current meeting details.
 
 We currently utilize the [#gateway-api-inference-extension](https://kubernetes.slack.com/?redir=%2Fmessages%2Fgateway-api-inference-extension) channel in Kubernetes Slack workspace for communications.
 
-Contributions are readily welcomed, follow the [dev guide](./docs/dev.md) to start contributing!
+Contributions are readily welcomed!
 
 ### Code of conduct
 

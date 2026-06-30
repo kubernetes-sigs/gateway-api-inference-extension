@@ -2,9 +2,8 @@
 
 Gateway API Inference Extension is an official Kubernetes project that optimizes self-hosting Generative Models on Kubernetes.
 
-The overall resource model focuses on 2 new inference-focused
-[personas](/concepts/roles-and-personas) and corresponding resources that
-they are expected to manage:
+The overall resource model focuses on the Inference Platform Owner
+[persona](/concepts/roles-and-personas) and corresponding resources:
 
 <!-- Source: https://docs.google.com/presentation/d/11HEYCgFi-aya7FS91JvAfllHiIlvfgcp7qpi_Azjk4E/edit#slide=id.g292839eca6d_1_0 -->
 <img src="/images/resource-model.png" alt="Gateway API Inference Extension Resource Model" class="center" width="550" />
@@ -18,23 +17,20 @@ The following specific terms to this project:
   serving Kubernetes self-hosted generative Artificial Intelligence (AI)
   workloads. It simplifies the deployment, management, and observability of AI
   inference workloads.
-- **Inference Scheduler**: An extendable component that makes decisions about which endpoint is optimal (best cost /
+- **Inference Router**: An extendable component that makes decisions about which endpoint is optimal (best cost /
   best performance) for an inference request based on `Metrics and Capabilities`
   from [Model Serving](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/003-model-server-protocol/README.md).
 - **Metrics and Capabilities**: Data provided by model serving platforms about
   performance, availability and capabilities to optimize routing. Includes
   things like [Prefix Cache](https://docs.vllm.ai/en/stable/design/v1/prefix_caching.html) status or [LoRA Adapters](https://docs.vllm.ai/en/stable/features/lora.html) availability.
-- **Endpoint Picker(EPP)**: An implementation of an `Inference Scheduler` with additional Routing, Flow, and Request Control layers to allow for sophisticated routing strategies. Additional info on the architecture of the EPP [here](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
-- **Body Based Router(BBR)**: An additional (and optional) implementation of an extension that extracts information from the body portion of the inference request, currently the model name attribute from the body of an OpenAI API request, which can then be used by the gateway to perform model-aware functions such as routing/scheduling. This may be used along with the EPP in order to have a combination of model picking and endpoint picking functionality.
-
-[Inference Gateway]:#concepts-and-definitions
+- **Endpoint Picker(EPP)**: An implementation of an `Inference Router`. In this repo, we provide a lightweight EPP for conformance testing purposes.
 
 ## Key Features 
 Gateway API Inference Extension optimizes self-hosting Generative AI Models on Kubernetes.
 It provides optimized load-balancing for self-hosted Generative AI Models on Kubernetes.
 The project’s goal is to improve and standardize routing to inference workloads across the ecosystem.
 
-This is achieved by leveraging Envoy's [External Processing](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) to extend any gateway that supports both ext-proc and [Gateway API](https://github.com/kubernetes-sigs/gateway-api) into an [inference gateway](#concepts-and-definitions).
+This is achieved by leveraging Envoy's [External Processing Protocol](https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/ext_proc_filter) to extend any gateway that supports both ext-proc and [Gateway API](https://github.com/kubernetes-sigs/gateway-api) into an [inference gateway](#concepts-and-definitions).
 This extension extends popular gateways like Envoy Gateway, kgateway, and GKE Gateway - to become [Inference Gateway](#concepts-and-definitions) -
 supporting inference platform teams self-hosting Generative Models (with a current focus on large language models) on Kubernetes.
 This integration makes it easy to expose and control access to your local [OpenAI-compatible chat completion endpoints](https://platform.openai.com/docs/api-reference/chat)
@@ -44,7 +40,7 @@ in a higher level **AI Gateways** like [LiteLLM](https://www.litellm.ai/), [Gloo
 
 - **Model-aware routing**: Instead of simply routing based on the path of the request, an **[inference gateway]** allows you to route to models based on the model names. This is enabled by support for GenAI Inference API specifications (such as OpenAI API) in the gateway implementations such as in Envoy Proxy. This model-aware routing also extends to Low-Rank Adaptation (LoRA) fine-tuned models.
 
-- **Serving priority**: an **[inference gateway]** allows you to specify the serving priority of your models. For example, you can specify that your models for online inference of chat tasks (which is more latency sensitive) have a higher [*Priority*](/reference/spec/#priority) than a model for latency tolerant tasks such as a summarization. 
+- **Serving priority**: an **[inference gateway]** allows you to specify the serving priority of your models. For example, you can specify that your models for online inference of chat tasks (which is more latency sensitive) have a higher priority than a model for latency tolerant tasks such as a summarization. 
 
 - **Model rollouts**:  an **[inference gateway]** allows you to incrementally roll out new model versions by traffic splitting definitions based on the model names. 
 
@@ -74,17 +70,10 @@ this project to become an **[inference gateway]**
 
 ### Endpoint Picker
 
-As part of this project, we've built the Endpoint Picker. A pluggable & extensible ext-proc deployment that implements [this architecture](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/0683-epp-architecture-proposal).
-
-### Model Server Frameworks
-
-This project will work closely with model server frameworks to establish a
-shared standard for interacting with these extensions, particularly focused on
-metrics and observability so extensions will be able to make informed routing
-decisions. The project is currently focused on integrations with
-[vLLM](https://github.com/vllm-project/vllm) and
-[Triton](https://github.com/triton-inference-server/server), and will be open to
-other integrations as they are requested.
+As part of this project, we provide a lightweight Endpoint Picker (EPP)
+reference implementation designed for conformance testing. For production
+deployments, users and implementers should implement their own EPP or use
+an existing one (such as [llm-d-router](https://github.com/llm-d/llm-d-router)).
 
 ## Request Flow
 

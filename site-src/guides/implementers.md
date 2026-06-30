@@ -88,7 +88,17 @@ With this approach, you can tailor the endpoint tracking and routing logic speci
 
 ### Callout Extension
 
-The [Endpoint Picker](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp), or EPP, is a core component of the inference extension. The primary interaction for routing requests is defined between the proxy (e.g., Envoy) and the EPP using the Envoy [external processing service protocol](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto). See the [Endpoint Picker Protocol specification](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol) and the [Implementing a Compatible Data Plane section](#implementing-a-compatible-data-plane) section below for more details.
+The Endpoint Picker (EPP) is a core component of the inference extension, responsible for making intelligent, model-aware routing decisions. The primary interaction for routing requests is defined between the proxy and the EPP using the Envoy [external processing service protocol](https://www.envoyproxy.io/docs/envoy/latest/api-v3/service/ext_proc/v3/external_processor.proto). 
+
+As an implementer, you have several choices for the EPP component:
+
+1. **Implement your own EPP**: Create a custom external processing service that implements the [Endpoint Picker Protocol specification](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol).
+2. **Use an external or third-party EPP**: Integrate with a production-ready, protocol-compliant endpoint picker or scheduler provided by your platform or the open-source community.
+
+> [!NOTE]
+> This repository provides a **Lightweight Endpoint Picker (lwepp)** under [pkg/lwepp](file:///usr/local/google/home/nxin/github/gcp/gateway-api-inference-extension/pkg/lwepp). However, it is intended only as a reference for testing and conformance, and is not recommended for production environments where high performance and advanced scheduling are required.
+
+For details on the interface between the proxy and EPP, see the [Endpoint Picker Protocol specification](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/docs/proposals/004-endpoint-picker-protocol) and the [Implementing a Compatible Data Plane section](#implementing-a-compatible-data-plane) section below.
 
 #### How to Callout to EPP
 
@@ -209,8 +219,8 @@ Here are some tips for testing your controller end-to-end:
 - **Focus on Key Scenarios**: Add common scenarios like creating, updating, and deleting InferencePool resources, as well as different routing rules that target InferencePool backends.
 - **Verify Routing Behaviors**: Design more complex routing scenarios and verify that requests are correctly routed to the appropriate model server pods within the InferencePool.
 - **Test Error Handling**: Verify that the controller correctly handles scenarios like unsupported model names or resource constraints (if priority-based shedding is implemented). Test with state transitions (such as constant requests while Pods behind EPP are being replaced and Pods behind InferencePool are being replaced) to ensure that the system is resilient to failures and can automatically recover by redirecting traffic to healthy Pods.
-- **Using Reference EPP Implementation + Echoserver**: You can use the [reference EPP implementation](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/epp) for testing your controller end-to-end. Instead of a full-fledged model server, a simple mock server (like the [echoserver](https://github.com/kubernetes-sigs/ingress-controller-conformance/tree/master/images/echoserver)) can be very useful for verifying routing to ensure the correct pod received the request. 
-- **Performance Test**: Run end-to-end [benchmarks](https://gateway-api-inference-extension.sigs.k8s.io/performance/benchmark/) to make sure that your inference gateway can achieve the latency target that is desired.
+- **Using Reference EPP Implementation + Echoserver**: You can use the [reference EPP implementation](https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/pkg/lwepp) for testing your controller end-to-end. Instead of a full-fledged model server, a simple mock server (like the [echoserver](https://github.com/kubernetes-sigs/ingress-controller-conformance/tree/master/images/echoserver)) can be very useful for verifying routing to ensure the correct pod received the request.
+- **Performance Test**: Run end-to-end benchmarks to make sure that your inference gateway can achieve the latency target that is desired.
 
 ### Conformance Tests
 

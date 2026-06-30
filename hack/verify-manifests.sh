@@ -50,7 +50,7 @@ main() {
   make kubectl-validate
 
   ${SCRIPT_ROOT}/bin/kubectl-validate "${TEMP_DIR}"
-  ${SCRIPT_ROOT}/bin/kubectl-validate "${SCRIPT_ROOT}/config/manifests" --local-crds "${TEMP_DIR}"
+  ${SCRIPT_ROOT}/bin/kubectl-validate "${SCRIPT_ROOT}/conformance/resources" --local-crds "${TEMP_DIR}"
 }
 
 main
