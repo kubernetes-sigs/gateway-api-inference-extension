@@ -31,7 +31,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.24.1
 	// Update the CONTROLLER_TOOLS_VERSION in Makefile when bumping controller-tools.
 	sigs.k8s.io/controller-tools v0.20.1
-	sigs.k8s.io/structured-merge-diff/v6 v6.4.0
+	sigs.k8s.io/structured-merge-diff/v6 v6.4.2
 	sigs.k8s.io/yaml v1.6.0
 )
 
