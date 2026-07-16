@@ -51,7 +51,7 @@ spec:
     matchLabels:
       app: vllm-qwen3-32b
   targetPorts:
-    - number: 8080
+    - number: 8000
   endpointPickerRef:
     name: vllm-qwen3-32b-epp
     port:
@@ -72,7 +72,7 @@ spec:
   ports:
   - port: 54321
     protocol: TCP
-    targetPort: 8080
+    targetPort: 8000
   selector:
     app:  vllm-qwen3-32b
   type: ClusterIP
