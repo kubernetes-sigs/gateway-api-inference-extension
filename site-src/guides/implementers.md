@@ -47,12 +47,15 @@ kind: InferencePool
 metadata:
   name: vllm-qwen3-32b
 spec:
-  targetPorts:
-    - number: 8000
   selector:
-    app: vllm-qwen3-32b
-  extensionRef:
+    matchLabels:
+      app: vllm-qwen3-32b
+  targetPorts:
+    - number: 8080
+  endpointPickerRef:
     name: vllm-qwen3-32b-epp
+    port:
+      number: 9002
 ```
 There are mainly two options for how to treat the Inference Pool in your controller.
 
@@ -69,7 +72,7 @@ spec:
   ports:
   - port: 54321
     protocol: TCP
-    targetPort: 8000
+    targetPort: 8080
   selector:
     app:  vllm-qwen3-32b
   type: ClusterIP

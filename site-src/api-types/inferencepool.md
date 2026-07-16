@@ -21,7 +21,7 @@ The full spec of the InferencePool is defined [here](/reference/spec/#inferencep
 In summary, the InferencePoolSpec consists of 3 major parts:
 
 - The `selector` field specifies which Pods belong to this pool. The labels in this selector must exactly match the labels applied to your model server Pods. 
-- The `targetPortNumber` field defines the port number that the Inference Gateway should route to on model server Pods that belong to this pool. 
+- The `targetPorts` field defines the port numbers that the Inference Gateway should route to on model server Pods that belong to this pool. 
 - The `endpointPickerRef` field references the Endpoint Picker (EPP) service that monitors key metrics from model servers within the InferencePool and provides intelligent routing decisions.
 
 ### Example Configuration
@@ -34,13 +34,15 @@ kind: InferencePool
 metadata:
   name: vllm-qwen3-32b
 spec:
-  targetPorts:
-    - number: 8000
   selector:
-    app: vllm-qwen3-32b
+    matchLabels:
+      app: vllm-qwen3-32b
+  targetPorts:
+    - number: 8080
   endpointPickerRef:
     name: vllm-qwen3-32b-epp
-    port: 9002
+    port:
+      number: 9002
     failureMode: FailOpen
 ```
 
@@ -48,8 +50,8 @@ In this example:
 
 - An InferencePool named `vllm-qwen3-32b` is created in the `default` namespace.
 - It will select Pods that have the label `app: vllm-qwen3-32b`.
-- Traffic routed to this InferencePool will call out to the EPP service `vllm-qwen3-32b-epp` on port `9002` for making routing decisions. If EPP fails to pick an endpoint, or is not responsive, the request will be dropped.
-- Traffic routed to this InferencePool will be forwarded to the port `8000` on the selected Pods.
+- Traffic routed to this InferencePool will call out to the EPP service `vllm-qwen3-32b-epp` on port `9002` for making routing decisions. With `failureMode: FailOpen`, if EPP fails to pick an endpoint or is not responsive, the request is forwarded to an endpoint chosen by the gateway.
+- Traffic routed to this InferencePool will be forwarded to the port `8080` on the selected Pods.
 
 ## Overlap with Service
 
