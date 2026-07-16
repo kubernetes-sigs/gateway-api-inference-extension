@@ -47,12 +47,15 @@ kind: InferencePool
 metadata:
   name: vllm-qwen3-32b
 spec:
+  selector:
+    matchLabels:
+      app: vllm-qwen3-32b
   targetPorts:
     - number: 8000
-  selector:
-    app: vllm-qwen3-32b
-  extensionRef:
+  endpointPickerRef:
     name: vllm-qwen3-32b-epp
+    port:
+      number: 9002
 ```
 There are mainly two options for how to treat the Inference Pool in your controller.
 
