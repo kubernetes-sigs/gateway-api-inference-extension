@@ -42,7 +42,11 @@ var (
 	)
 
 	// ProtocolHeaders are managed by the proxy layer (Envoy/EPP).
-	ProtocolHeaders = sets.New("content-length")
+	// transfer-encoding is a hop-by-hop header that is invalid in HTTP/2.
+	// If the EPP copies it from the upstream response as a SetHeader mutation,
+	// Envoy may compute content-length from the first body chunk on the
+	// HTTP/2 hop, truncating streaming responses (e.g. /v1/responses SSE).
+	ProtocolHeaders = sets.New("content-length", "transfer-encoding")
 )
 
 func IsSystemOwnedHeader(key string) bool {
