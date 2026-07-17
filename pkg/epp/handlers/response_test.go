@@ -344,7 +344,8 @@ func TestGenerateResponseHeaders_Sanitization(t *testing.T) {
 				"x-backend-server":              "vllm-v0.6.3",            // should passthrough
 				metadata.ObjectiveKey:           "sensitive-objective-id", // should be stripped
 				metadata.DestinationEndpointKey: "10.2.0.5:8080",          // should be stripped
-				"content-length":                "500",                    // hould be stripped
+				"content-length":                "500",                    // should be stripped
+				"transfer-encoding":             "chunked",                // should be stripped
 			},
 		},
 	}
@@ -361,6 +362,7 @@ func TestGenerateResponseHeaders_Sanitization(t *testing.T) {
 	assert.NotContains(t, gotHeaders, metadata.ObjectiveKey)
 	assert.NotContains(t, gotHeaders, metadata.DestinationEndpointKey)
 	assert.NotContains(t, gotHeaders, "content-length")
+	assert.NotContains(t, gotHeaders, "transfer-encoding")
 }
 
 func TestRewriteModelName(t *testing.T) {
