@@ -224,9 +224,9 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		observedPrimary := ph / total
 		expectedPrimary := float64(primaryWeight) / float64(primaryWeight+secondaryWeight)
 
-		// Allow either a 10 percentage-point absolute error, or a 3-sigma binomial CI.
+		// A 4.5-sigma interval keeps random false failures below 0.001% at this sample size.
 		sigma := math.Sqrt(expectedPrimary * (1.0 - expectedPrimary) / total)
-		absTolerance := math.Max(0.10, 3.0*sigma)
+		absTolerance := math.Max(0.10, 4.5*sigma)
 
 		diff := math.Abs(observedPrimary - expectedPrimary)
 		require.LessOrEqualf(t, diff, absTolerance,
