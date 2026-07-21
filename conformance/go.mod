@@ -13,7 +13,7 @@ require (
 )
 
 require (
-	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sync v0.22.0
