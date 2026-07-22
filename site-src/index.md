@@ -88,11 +88,11 @@ to any Gateway API users or implementers.
 2. If the request should be routed to an InferencePool, the Gateway will forward
 the request information to the endpoint selection extension for that pool.
 
-3. The inference gateway will fetch metrics from whichever portion of the InferencePool
+3. The Endpoint Picker (EPP) will fetch metrics from whichever portion of the InferencePool
 endpoints can best achieve the configured objectives. Note that this kind of
-metrics probing may happen asynchronously, depending on the inference gateway.
+metrics probing may happen asynchronously, depending on the EPP.
 
-4. The inference gateway will instruct the Gateway which endpoint the request should be
+4. The EPP will instruct the Gateway which endpoint the request should be
 routed to.
 
 5. The Gateway will route the request to the desired endpoint.
