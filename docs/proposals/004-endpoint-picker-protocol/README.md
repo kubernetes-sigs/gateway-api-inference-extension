@@ -72,6 +72,8 @@ dynamicMetadata: {
 
 The value of the header or metadata entry MUST contain at least one endpoint in `<ip:port>` format or multiple endpoints in `<ip:port>,<ip:port>,...` format. Multiple endpoints are separated by commas. The first valid endpoint in the list will be used. If retry is configured, the proxy will go sequentially down the list until one valid endpoint is found.
 
+The ordered endpoint list is scoped to the selected `InferencePool` backend for which the EPP was invoked. If a retry remains on the same backend, the data plane MUST continue through that backend's endpoint list in order. If route-level retry or failover selects a different `InferencePool` backend, the data plane MUST invoke the EPP associated with the newly selected backend and MUST NOT reuse endpoints returned for the previous backend. This protocol does not otherwise define whether route-level retries retain or reselect a backend.
+
 Constraints:
 - If the EPP did not communicate the server endpoint via these two methods, it MUST return an error as follows:
   -  [ImmediateResponse](https://github.com/envoyproxy/envoy/blob/f2023ef77bdb4abaf9feef963c9a0c291f55568f/api/envoy/service/ext_proc/v3/external_processor.proto#L195) with 503 (Serivce Unavailable) HTTP status code if there are no ready endpoints.
@@ -95,6 +97,8 @@ filterMetadata: {
 ```
 
 This metadata is required because the EPP provides a list of endpoints to the data plane (see [Destination Endpoint](#destination-endpoint)), and the data plane, according to retry configuration, will attempt each endpoint in order until the request is successful or no more endpoints are available.
+
+If route-level retry or failover selects a different `InferencePool` backend, `x-gateway-destination-endpoint-served` MUST be reported to the EPP associated with the backend that produced the terminal response.
 
 ## Health Checking
 
