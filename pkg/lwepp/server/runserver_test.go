@@ -36,3 +36,22 @@ func TestRunnable(t *testing.T) {
 		t.Error("runner returned NeedLeaderElection = true, expected false")
 	}
 }
+
+func TestNewDefaultExtProcServerRunnerAppliesOptionDefaults(t *testing.T) {
+	opts := server.NewOptions()
+	runner := server.NewDefaultExtProcServerRunner()
+
+	if runner.GrpcPort != opts.GRPCPort {
+		t.Errorf("GrpcPort = %d, want %d", runner.GrpcPort, opts.GRPCPort)
+	}
+	if runner.GrpcHealthPort != opts.GRPCHealthPort {
+		t.Errorf("GrpcHealthPort = %d, want %d", runner.GrpcHealthPort, opts.GRPCHealthPort)
+	}
+	if runner.HealthChecking != opts.HealthChecking {
+		t.Errorf("HealthChecking = %t, want %t", runner.HealthChecking, opts.HealthChecking)
+	}
+	// SecureServing defaults to true, so a runner built from the defaults must serve TLS.
+	if runner.SecureServing != opts.SecureServing {
+		t.Errorf("SecureServing = %t, want %t", runner.SecureServing, opts.SecureServing)
+	}
+}
