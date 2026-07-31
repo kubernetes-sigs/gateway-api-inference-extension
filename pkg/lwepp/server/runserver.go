@@ -68,8 +68,10 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 	}
 	return &ExtProcServerRunner{
 		GrpcPort:       opts.GRPCPort,
+		GrpcHealthPort: opts.GRPCHealthPort,
 		GKNN:           gknn,
 		HealthChecking: opts.HealthChecking,
+		SecureServing:  opts.SecureServing,
 		// Datastore can be assigned later.
 	}
 }
