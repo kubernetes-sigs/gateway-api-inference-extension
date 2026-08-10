@@ -94,9 +94,9 @@ func (c *PodReconciler) updateDatastore(ctx context.Context, pod *corev1.Pod) {
 		c.Datastore.PodDelete(pod.Name)
 	} else {
 		if c.Datastore.PodUpdateOrAddIfNotExist(ctx, pod) {
-			logger.V(logutil.DEFAULT).Info("Pod added")
-		} else {
 			logger.V(logutil.DEFAULT).Info("Pod already exists")
+		} else {
+			logger.V(logutil.DEFAULT).Info("Pod added")
 		}
 	}
 }
