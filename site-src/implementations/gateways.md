@@ -5,6 +5,7 @@ This project has several conformant Gateway implementations:
 - [Gateway Implementations](#gateway-implementations)
   - [Istio](#istio)
   - [Agentgateway](#agentgateway)
+  - [Higress](#higress)
   - [NGINX Gateway Fabric](#nginx-gateway-fabric)
 
 Agentgateway supports both standalone and Kubernetes deployment modes.
@@ -37,6 +38,16 @@ on a local machine or server without Kubernetes, or be deployed on
 environments, or within your
 [llm-d infrastructure](https://github.com/llm-d-incubation/llm-d-infra) to
 improve accelerator (GPU) utilization for AI inference workloads.
+
+## Higress
+
+[Higress](https://higress.ai/) is a cloud-native API gateway built on Istio and
+Envoy. It supports the Gateway API Inference Extension for inference-aware
+routing and provides API management and AI gateway capabilities. Higress is an
+open source [CNCF project](https://www.cncf.io/projects/higress/).
+
+Source code, documentation, and issue tracking are available in the
+[Higress repository](https://github.com/higress-group/higress).
 
 ## NGINX Gateway Fabric
 
