@@ -15,7 +15,7 @@ require (
 require (
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/stretchr/testify v1.12.0
+	github.com/stretchr/testify v1.12.1
 	golang.org/x/sync v0.22.0
 	google.golang.org/protobuf v1.36.12 // indirect
 	k8s.io/api v0.36.3
@@ -55,7 +55,7 @@ require (
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
@@ -66,7 +66,6 @@ require (
 	google.golang.org/grpc v1.83.0 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260501160325-927ab1f70cd6 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
