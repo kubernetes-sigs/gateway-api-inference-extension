@@ -127,6 +127,44 @@ func TestInferencePoolToEndpointPool(t *testing.T) {
 			},
 		},
 		{
+			name: "ports with unspecified role are treated as serving endpoints",
+			input: &v1.InferencePool{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns-6"},
+				Spec: v1.InferencePoolSpec{
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{"app": "vllm"},
+					},
+					TargetPorts: []v1.Port{{Number: 8000, Role: v1.PortRoleServing}, {Number: 8001}},
+				},
+			},
+			want: &datastore.EndpointPool{
+				Selector:    map[string]string{"app": "vllm"},
+				TargetPorts: []int{8000, 8001},
+				Namespace:   "ns-6",
+			},
+		},
+		{
+			name: "metrics and health ports are excluded from traffic endpoints",
+			input: &v1.InferencePool{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns-7"},
+				Spec: v1.InferencePoolSpec{
+					Selector: v1.LabelSelector{
+						MatchLabels: map[v1.LabelKey]v1.LabelValue{"app": "vllm"},
+					},
+					TargetPorts: []v1.Port{
+						{Number: 8000, Role: v1.PortRoleServing},
+						{Number: 9090, Role: v1.PortRoleMetrics},
+						{Number: 8080, Role: v1.PortRoleHealth},
+					},
+				},
+			},
+			want: &datastore.EndpointPool{
+				Selector:    map[string]string{"app": "vllm"},
+				TargetPorts: []int{8000},
+				Namespace:   "ns-7",
+			},
+		},
+		{
 			name: "empty namespace is carried over as empty",
 			input: &v1.InferencePool{
 				Spec: v1.InferencePoolSpec{
