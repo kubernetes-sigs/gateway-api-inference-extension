@@ -30,6 +30,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/metadata"
 )
@@ -246,16 +247,18 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				}
 			}
 
-			resp := &extProcPb.ProcessingResponse{
-				Response: &extProcPb.ProcessingResponse_RequestBody{
-					RequestBody: &extProcPb.BodyResponse{
-						Response: &extProcPb.CommonResponse{},
+			for _, commonResp := range envoy.BuildChunkedBodyResponses(v.RequestBody.Body, v.RequestBody.EndOfStream) {
+				resp := &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_RequestBody{
+						RequestBody: &extProcPb.BodyResponse{
+							Response: commonResp,
+						},
 					},
-				},
-			}
+				}
 
-			if err := srv.Send(resp); err != nil {
-				return status.Errorf(codes.Unknown, "failed to send body response back to Envoy: %v", err)
+				if err := srv.Send(resp); err != nil {
+					return status.Errorf(codes.Unknown, "failed to send body response back to Envoy: %v", err)
+				}
 			}
 
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
@@ -267,16 +270,18 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			logger.V(1).Info("Received response body", "endOfStream", v.ResponseBody.EndOfStream)
-			resp := &extProcPb.ProcessingResponse{
-				Response: &extProcPb.ProcessingResponse_ResponseBody{
-					ResponseBody: &extProcPb.BodyResponse{
-						Response: &extProcPb.CommonResponse{},
+			for _, commonResp := range envoy.BuildChunkedBodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream) {
+				resp := &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{
+						ResponseBody: &extProcPb.BodyResponse{
+							Response: commonResp,
+						},
 					},
-				},
-			}
+				}
 
-			if err := srv.Send(resp); err != nil {
-				return status.Errorf(codes.Unknown, "failed to send response body back to Envoy: %v", err)
+				if err := srv.Send(resp); err != nil {
+					return status.Errorf(codes.Unknown, "failed to send response body back to Envoy: %v", err)
+				}
 			}
 
 		default:
