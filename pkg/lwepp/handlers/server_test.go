@@ -87,21 +87,30 @@ func TestProcess_DeferredHeaderMutationOnStreamingBody(t *testing.T) {
 			},
 		},
 	}
+	respBody := &extProcPb.ProcessingRequest{
+		Request: &extProcPb.ProcessingRequest_ResponseBody{
+			ResponseBody: &extProcPb.HttpBody{
+				Body:        []byte(`{"response": "world"}`),
+				EndOfStream: true,
+			},
+		},
+	}
 
 	stream := &mockProcessServer{
 		ctx:          context.Background(),
-		recvMessages: []*extProcPb.ProcessingRequest{reqHeaders, reqBody},
+		recvMessages: []*extProcPb.ProcessingRequest{reqHeaders, reqBody, respBody},
 	}
 
 	err := server.Process(stream)
 	assert.NoError(t, err)
 
 	// Assertions on the sequence of sent responses:
-	// - We expect exactly 2 responses sent back.
+	// - We expect exactly 3 responses sent back.
 	// - Response 1: The DEFERRED RequestHeaders response containing the target routing mutation headers.
-	// - Response 2: The RequestBody response containing a simple empty body ack.
+	// - Response 2: The RequestBody response preserving the original request body.
+	// - Response 3: The ResponseBody response preserving the original response body.
 	require := assert.New(t)
-	if require.Len(stream.sentMessages, 2) {
+	if require.Len(stream.sentMessages, 3) {
 		// Response 1: RequestHeaders Response
 		firstResp := stream.sentMessages[0].GetRequestHeaders()
 		require.NotNil(firstResp, "First response must be a RequestHeaders frame")
@@ -113,9 +122,21 @@ func TestProcess_DeferredHeaderMutationOnStreamingBody(t *testing.T) {
 		assert.Equal(t, "X-Echo-Set-Header", setHeaders[1].GetHeader().GetKey())
 		assert.Equal(t, metadata.ConformanceTestResultHeader+":10.0.0.1:8080", string(setHeaders[1].GetHeader().GetRawValue()))
 
-		// Response 2: RequestBody Response (Ack)
+		// Response 2: RequestBody Response
 		secondResp := stream.sentMessages[1].GetRequestBody()
-		require.NotNil(secondResp, "Second response must be a RequestBody ack frame")
+		require.NotNil(secondResp, "Second response must be a RequestBody frame")
 		require.Nil(secondResp.GetResponse().GetHeaderMutation(), "Deferred body response must not contain redundant mutations")
+		requestBody := secondResp.GetResponse().GetBodyMutation().GetStreamedResponse()
+		require.NotNil(requestBody)
+		assert.Equal(t, reqBody.GetRequestBody().GetBody(), requestBody.GetBody())
+		assert.Equal(t, reqBody.GetRequestBody().GetEndOfStream(), requestBody.GetEndOfStream())
+
+		// Response 3: ResponseBody Response
+		thirdResp := stream.sentMessages[2].GetResponseBody()
+		require.NotNil(thirdResp, "Third response must be a ResponseBody frame")
+		responseBody := thirdResp.GetResponse().GetBodyMutation().GetStreamedResponse()
+		require.NotNil(responseBody)
+		assert.Equal(t, respBody.GetResponseBody().GetBody(), responseBody.GetBody())
+		assert.Equal(t, respBody.GetResponseBody().GetEndOfStream(), responseBody.GetEndOfStream())
 	}
 }
