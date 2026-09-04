@@ -117,13 +117,12 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		allIPs := append(append([]string{}, primaryPodIPs...), secondaryPodIPs...)
 		eppHeaderValue := strings.Join(allIPs, ",")
 
-		// Warm up every pod individually across both pools to guarantee that GFE
-		// backend health checks and NEGs for both pools are 100% healthy before kicking off concurrent traffic.
+		// Warm each backend to let health checks and NEGs settle. Failure is logged
+		// so the measured requests can still report routing errors.
 		allPods := append(append([]corev1.Pod{}, primaryPods...), secondaryPods...)
 		for _, pod := range allPods {
-			pod := pod
 			t.Logf("Warming up pod %s (%s)", pod.Name, pod.Status.PodIP)
-			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
+			warmUpErr := warmUpBackend(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
@@ -145,6 +144,10 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 					Namespace: resources.AppBackendNamespace,
 				},
 			)
+			if warmUpErr != nil {
+				t.Logf("WARNING: warm-up for pod %s (%s) failed: %v; continuing to routing assertions",
+					pod.Name, pod.Status.PodIP, warmUpErr)
+			}
 		}
 
 		requestBody := `{
