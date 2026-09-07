@@ -138,12 +138,11 @@ func (s *StreamingServer) handleRequestHeaders(ctx context.Context, reqCtx *Requ
 	return nil
 }
 
-func (s *StreamingServer) pickEndpoint(ctx context.Context, reqCtx *RequestContext, body []byte) error {
+func (s *StreamingServer) pickEndpoint(ctx context.Context, reqCtx *RequestContext) error {
 	logger := log.FromContext(ctx)
 
 	pickReq := &PickRequest{
 		Headers: reqCtx.Headers,
-		Body:    body,
 	}
 
 	res, err := s.picker.Pick(ctx, pickReq, reqCtx.Candidates)

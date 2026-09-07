@@ -199,7 +199,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				return status.Errorf(codes.Internal, "internal error: %v", err)
 			}
 
-			err = s.pickEndpoint(ctx, reqCtx, nil)
+			err = s.pickEndpoint(ctx, reqCtx)
 			if err != nil {
 				logger.Error(err, "Failed to pick endpoint")
 				return status.Errorf(codes.Internal, "internal error: %v", err)

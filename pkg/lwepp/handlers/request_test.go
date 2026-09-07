@@ -65,14 +65,14 @@ func TestHandleRequestHeaders_RoundRobin(t *testing.T) {
 	reqCtx1 := &RequestContext{}
 	err := server.handleRequestHeaders(context.Background(), reqCtx1, nil, req)
 	assert.NoError(t, err)
-	err = server.pickEndpoint(context.Background(), reqCtx1, nil)
+	err = server.pickEndpoint(context.Background(), reqCtx1)
 	assert.NoError(t, err)
 
 	// Second request
 	reqCtx2 := &RequestContext{}
 	err = server.handleRequestHeaders(context.Background(), reqCtx2, nil, req)
 	assert.NoError(t, err)
-	err = server.pickEndpoint(context.Background(), reqCtx2, nil)
+	err = server.pickEndpoint(context.Background(), reqCtx2)
 	assert.NoError(t, err)
 
 	// They should be different pods (round-robin)
@@ -82,7 +82,7 @@ func TestHandleRequestHeaders_RoundRobin(t *testing.T) {
 	reqCtx3 := &RequestContext{}
 	err = server.handleRequestHeaders(context.Background(), reqCtx3, nil, req)
 	assert.NoError(t, err)
-	err = server.pickEndpoint(context.Background(), reqCtx3, nil)
+	err = server.pickEndpoint(context.Background(), reqCtx3)
 	assert.NoError(t, err)
 	assert.Equal(t, reqCtx1.SelectedPodIP, reqCtx3.SelectedPodIP)
 }
@@ -109,7 +109,7 @@ func TestHandleRequestHeaders_FilteringViaHeader(t *testing.T) {
 	reqCtx := &RequestContext{}
 	err := server.handleRequestHeaders(context.Background(), reqCtx, nil, req)
 	assert.NoError(t, err)
-	err = server.pickEndpoint(context.Background(), reqCtx, nil)
+	err = server.pickEndpoint(context.Background(), reqCtx)
 	assert.NoError(t, err)
 	assert.Equal(t, "10.0.0.2", reqCtx.SelectedPodIP)
 }
@@ -162,7 +162,7 @@ func TestHandleRequestHeaders_FilteringViaFilterMetadata(t *testing.T) {
 	reqCtx := &RequestContext{}
 	err := server.handleRequestHeaders(context.Background(), reqCtx, fullReq, req)
 	assert.NoError(t, err)
-	err = server.pickEndpoint(context.Background(), reqCtx, nil)
+	err = server.pickEndpoint(context.Background(), reqCtx)
 	assert.NoError(t, err)
 	assert.Equal(t, "10.0.0.3", reqCtx.SelectedPodIP)
 }
@@ -239,7 +239,7 @@ func TestHandleRequestHeaders_HeaderTakesPrecedenceOverMetadata(t *testing.T) {
 	reqCtx := &RequestContext{}
 	err := server.handleRequestHeaders(context.Background(), reqCtx, fullReq, req)
 	assert.NoError(t, err)
-	err = server.pickEndpoint(context.Background(), reqCtx, nil)
+	err = server.pickEndpoint(context.Background(), reqCtx)
 	assert.NoError(t, err)
 	// The test header should override metadata-based filtering.
 	assert.Equal(t, "10.0.0.2", reqCtx.SelectedPodIP)
