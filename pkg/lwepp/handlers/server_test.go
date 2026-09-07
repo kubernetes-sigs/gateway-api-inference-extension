@@ -140,3 +140,86 @@ func TestProcess_DeferredHeaderMutationOnStreamingBody(t *testing.T) {
 		assert.Equal(t, respBody.GetResponseBody().GetEndOfStream(), responseBody.GetEndOfStream())
 	}
 }
+
+// TestProcess_DeferredHeaderMutationOnChunkedStreamingBody covers a body that arrives in
+// more than one chunk. The endpoint is only known once the whole body has been received, so
+// the request headers response is deferred to end of stream. Envoy accepts responses in the
+// order it asked for them, and a request body response sent while the headers response is
+// still outstanding is treated as spurious: Envoy abandons the stream and the request fails.
+//
+// The body chunks must therefore be held until the deferred headers response has been sent.
+func TestProcess_DeferredHeaderMutationOnChunkedStreamingBody(t *testing.T) {
+	pods := []*datastore.Endpoint{
+		{Address: "10.0.0.1", Port: "8080"},
+	}
+	ds := &mockDatastore{pods: pods}
+	server := NewStreamingServer(ds)
+
+	reqHeaders := &extProcPb.ProcessingRequest{
+		Request: &extProcPb.ProcessingRequest_RequestHeaders{
+			RequestHeaders: &extProcPb.HttpHeaders{
+				Headers: &envoyCorev3.HeaderMap{
+					Headers: []*envoyCorev3.HeaderValue{
+						{Key: "test-epp-endpoint-selection", Value: "10.0.0.1"},
+					},
+				},
+				EndOfStream: false,
+			},
+		},
+	}
+
+	// The body arrives in two chunks. Only the second ends the stream, so at the time the
+	// first is received the endpoint is still unknown and the headers response is deferred.
+	firstChunk := []byte(`{"prompt": "hel`)
+	lastChunk := []byte(`lo"}`)
+
+	reqBodyFirst := &extProcPb.ProcessingRequest{
+		Request: &extProcPb.ProcessingRequest_RequestBody{
+			RequestBody: &extProcPb.HttpBody{
+				Body:        firstChunk,
+				EndOfStream: false,
+			},
+		},
+	}
+	reqBodyLast := &extProcPb.ProcessingRequest{
+		Request: &extProcPb.ProcessingRequest_RequestBody{
+			RequestBody: &extProcPb.HttpBody{
+				Body:        lastChunk,
+				EndOfStream: true,
+			},
+		},
+	}
+
+	stream := &mockProcessServer{
+		ctx:          t.Context(),
+		recvMessages: []*extProcPb.ProcessingRequest{reqHeaders, reqBodyFirst, reqBodyLast},
+	}
+
+	err := server.Process(stream)
+	assert.NoError(t, err)
+
+	require := assert.New(t)
+
+	// Nothing may be sent before the deferred headers response. A body response emitted for
+	// the first chunk would appear here and would be the failure this test guards against.
+	if require.NotEmpty(stream.sentMessages, "expected the deferred headers response") {
+		require.NotNil(stream.sentMessages[0].GetRequestHeaders(),
+			"the first response must be the deferred RequestHeaders frame, not a body frame")
+	}
+
+	// One headers response and one body response carrying the reassembled body.
+	if require.Len(stream.sentMessages, 2) {
+		setHeaders := stream.sentMessages[0].GetRequestHeaders().GetResponse().GetHeaderMutation().GetSetHeaders()
+		require.Len(setHeaders, 2)
+		assert.Equal(t, metadata.DestinationEndpointKey, setHeaders[0].GetHeader().GetKey())
+		assert.Equal(t, "10.0.0.1:8080", string(setHeaders[0].GetHeader().GetRawValue()))
+
+		bodyResp := stream.sentMessages[1].GetRequestBody()
+		require.NotNil(bodyResp, "the second response must be a RequestBody frame")
+		streamed := bodyResp.GetResponse().GetBodyMutation().GetStreamedResponse()
+		require.NotNil(streamed)
+		assert.Equal(t, append(append([]byte{}, firstChunk...), lastChunk...), streamed.GetBody(),
+			"both chunks must be forwarded, in arrival order")
+		assert.True(t, streamed.GetEndOfStream(), "the flushed body response ends the stream")
+	}
+}
