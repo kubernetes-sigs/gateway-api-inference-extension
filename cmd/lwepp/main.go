@@ -89,6 +89,7 @@ func main() {
 		Datastore:      ds,
 		HealthChecking: opts.HealthChecking,
 		SecureServing:  opts.SecureServing,
+		BodyMode:       opts.BodyMode,
 	}
 
 	if err := runner.SetupWithManager(mgr); err != nil {

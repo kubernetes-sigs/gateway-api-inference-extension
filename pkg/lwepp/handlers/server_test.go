@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	processingModePb "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -56,7 +57,7 @@ func (m *mockProcessServer) Recv() (*extProcPb.ProcessingRequest, error) {
 	return msg, nil
 }
 
-func TestProcess_DeferredHeaderMutationOnStreamingBody(t *testing.T) {
+func TestProcess_HeaderMutationOnStreamingBody(t *testing.T) {
 	pods := []*datastore.Endpoint{
 		{Address: "10.0.0.1", Port: "8080"},
 	}
@@ -138,5 +139,97 @@ func TestProcess_DeferredHeaderMutationOnStreamingBody(t *testing.T) {
 		require.NotNil(responseBody)
 		assert.Equal(t, respBody.GetResponseBody().GetBody(), responseBody.GetBody())
 		assert.Equal(t, respBody.GetResponseBody().GetEndOfStream(), responseBody.GetEndOfStream())
+	}
+}
+
+func TestProcess_FullDuplexStreamedBodyInterleaving(t *testing.T) {
+	server := NewStreamingServer(&mockDatastore{
+		pods: []*datastore.Endpoint{{Address: "10.0.0.1", Port: "8080"}},
+	})
+
+	recvMessages := []*extProcPb.ProcessingRequest{
+		{
+			Request: &extProcPb.ProcessingRequest_RequestHeaders{
+				RequestHeaders: &extProcPb.HttpHeaders{
+					Headers:     &envoyCorev3.HeaderMap{},
+					EndOfStream: false,
+				},
+			},
+		},
+		{
+			Request: &extProcPb.ProcessingRequest_RequestBody{
+				RequestBody: &extProcPb.HttpBody{Body: []byte("request-1"), EndOfStream: false},
+			},
+		},
+		{
+			Request: &extProcPb.ProcessingRequest_ResponseHeaders{
+				ResponseHeaders: &extProcPb.HttpHeaders{Headers: &envoyCorev3.HeaderMap{}},
+			},
+		},
+		{
+			Request: &extProcPb.ProcessingRequest_ResponseBody{
+				ResponseBody: &extProcPb.HttpBody{Body: []byte("response-1"), EndOfStream: false},
+			},
+		},
+		{
+			Request: &extProcPb.ProcessingRequest_RequestBody{
+				RequestBody: &extProcPb.HttpBody{Body: []byte("request-2"), EndOfStream: true},
+			},
+		},
+		{
+			Request: &extProcPb.ProcessingRequest_ResponseBody{
+				ResponseBody: &extProcPb.HttpBody{Body: []byte("response-2"), EndOfStream: true},
+			},
+		},
+	}
+
+	stream := &mockProcessServer{ctx: context.Background(), recvMessages: recvMessages}
+	assert.NoError(t, server.Process(stream))
+
+	if assert.Len(t, stream.sentMessages, len(recvMessages)) {
+		assert.NotNil(t, stream.sentMessages[0].GetRequestHeaders())
+		assert.NotNil(t, stream.sentMessages[1].GetRequestBody())
+		assert.NotNil(t, stream.sentMessages[2].GetResponseHeaders())
+		assert.NotNil(t, stream.sentMessages[3].GetResponseBody())
+		assert.NotNil(t, stream.sentMessages[4].GetRequestBody())
+		assert.NotNil(t, stream.sentMessages[5].GetResponseBody())
+	}
+}
+
+func TestProcess_BufferedBodyMode(t *testing.T) {
+	server := NewStreamingServerWithBodyMode(&mockDatastore{
+		pods: []*datastore.Endpoint{{Address: "10.0.0.1", Port: "8080"}},
+	}, processingModePb.ProcessingMode_BUFFERED)
+
+	reqBody := &extProcPb.ProcessingRequest{
+		Request: &extProcPb.ProcessingRequest_RequestBody{
+			RequestBody: &extProcPb.HttpBody{Body: []byte("request"), EndOfStream: true},
+		},
+	}
+	respBody := &extProcPb.ProcessingRequest{
+		Request: &extProcPb.ProcessingRequest_ResponseBody{
+			ResponseBody: &extProcPb.HttpBody{Body: []byte("response"), EndOfStream: true},
+		},
+	}
+	stream := &mockProcessServer{
+		ctx: context.Background(),
+		recvMessages: []*extProcPb.ProcessingRequest{
+			{Request: &extProcPb.ProcessingRequest_RequestHeaders{
+				RequestHeaders: &extProcPb.HttpHeaders{Headers: &envoyCorev3.HeaderMap{}},
+			}},
+			reqBody,
+			respBody,
+		},
+	}
+
+	assert.NoError(t, server.Process(stream))
+	if assert.Len(t, stream.sentMessages, 3) {
+		requestMutation := stream.sentMessages[1].GetRequestBody().GetResponse().GetBodyMutation()
+		assert.Equal(t, reqBody.GetRequestBody().GetBody(), requestMutation.GetBody())
+		assert.Nil(t, requestMutation.GetStreamedResponse())
+
+		responseMutation := stream.sentMessages[2].GetResponseBody().GetResponse().GetBodyMutation()
+		assert.Equal(t, respBody.GetResponseBody().GetBody(), responseMutation.GetBody())
+		assert.Nil(t, responseMutation.GetStreamedResponse())
 	}
 }

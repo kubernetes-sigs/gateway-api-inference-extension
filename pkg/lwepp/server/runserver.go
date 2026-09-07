@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"time"
 
+	processingModePb "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
@@ -49,6 +50,7 @@ type ExtProcServerRunner struct {
 	Datastore      datastore.Datastore
 	HealthChecking bool
 	SecureServing  bool
+	BodyMode       string
 }
 
 // NewDefaultExtProcServerRunner creates a runner with default values.
@@ -72,6 +74,7 @@ func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 		GKNN:           gknn,
 		HealthChecking: opts.HealthChecking,
 		SecureServing:  opts.SecureServing,
+		BodyMode:       opts.BodyMode,
 		// Datastore can be assigned later.
 	}
 }
@@ -113,7 +116,11 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			srv = grpc.NewServer()
 		}
 
-		extProcServer := handlers.NewStreamingServer(r.Datastore)
+		bodyMode := processingModePb.ProcessingMode_FULL_DUPLEX_STREAMED
+		if r.BodyMode == BodyModeBuffered {
+			bodyMode = processingModePb.ProcessingMode_BUFFERED
+		}
+		extProcServer := handlers.NewStreamingServerWithBodyMode(r.Datastore, bodyMode)
 		extProcPb.RegisterExternalProcessorServer(srv, extProcServer)
 
 		if r.HealthChecking {

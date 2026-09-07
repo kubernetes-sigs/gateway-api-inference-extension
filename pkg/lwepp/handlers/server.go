@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
+	processingModePb "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/ext_proc/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -42,9 +43,14 @@ type Datastore interface {
 }
 
 func NewStreamingServer(datastore Datastore) *StreamingServer {
+	return NewStreamingServerWithBodyMode(datastore, processingModePb.ProcessingMode_FULL_DUPLEX_STREAMED)
+}
+
+func NewStreamingServerWithBodyMode(datastore Datastore, bodyMode processingModePb.ProcessingMode_BodySendMode) *StreamingServer {
 	return &StreamingServer{
 		datastore: datastore,
 		picker:    &RoundRobinPicker{},
+		bodyMode:  bodyMode,
 	}
 }
 
@@ -52,6 +58,7 @@ func NewStreamingServer(datastore Datastore) *StreamingServer {
 type StreamingServer struct {
 	datastore Datastore
 	picker    EndpointPicker
+	bodyMode  processingModePb.ProcessingMode_BodySendMode
 }
 
 // RequestContext stores context information during the life time of an HTTP request.
@@ -103,6 +110,61 @@ func (p *RoundRobinPicker) Pick(ctx context.Context, req *PickRequest, endpoints
 
 const maxRequestBodySize = 10 * 1024 * 1024 // 10MB
 
+func requestHeadersResponse(reqCtx *RequestContext) *extProcPb.ProcessingResponse {
+	return &extProcPb.ProcessingResponse{
+		Response: &extProcPb.ProcessingResponse_RequestHeaders{
+			RequestHeaders: &extProcPb.HeadersResponse{
+				Response: &extProcPb.CommonResponse{
+					ClearRouteCache: true,
+					HeaderMutation: &extProcPb.HeaderMutation{
+						SetHeaders: []*configPb.HeaderValueOption{
+							{
+								Header: &configPb.HeaderValue{
+									Key:      metadata.DestinationEndpointKey,
+									RawValue: []byte(reqCtx.TargetEndpoint),
+								},
+							},
+							{
+								Header: &configPb.HeaderValue{
+									Key:      "X-Echo-Set-Header",
+									RawValue: []byte(metadata.ConformanceTestResultHeader + ":" + reqCtx.TargetEndpoint),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		DynamicMetadata: &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				metadata.DestinationEndpointNamespace: structpb.NewStructValue(&structpb.Struct{
+					Fields: map[string]*structpb.Value{
+						metadata.DestinationEndpointKey: structpb.NewStringValue(reqCtx.TargetEndpoint),
+					},
+				}),
+			},
+		},
+	}
+}
+
+func (s *StreamingServer) bodyResponses(body []byte, endOfStream bool, responseType func(*extProcPb.BodyResponse) *extProcPb.ProcessingResponse) []*extProcPb.ProcessingResponse {
+	if s.bodyMode == processingModePb.ProcessingMode_BUFFERED {
+		return []*extProcPb.ProcessingResponse{responseType(&extProcPb.BodyResponse{
+			Response: &extProcPb.CommonResponse{
+				BodyMutation: &extProcPb.BodyMutation{
+					Mutation: &extProcPb.BodyMutation_Body{Body: body},
+				},
+			},
+		})}
+	}
+
+	responses := make([]*extProcPb.ProcessingResponse, 0)
+	for _, commonResp := range envoy.BuildChunkedBodyResponses(body, endOfStream) {
+		responses = append(responses, responseType(&extProcPb.BodyResponse{Response: commonResp}))
+	}
+	return responses
+}
+
 func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	ctx := srv.Context()
 	logger := ctrl.Log.WithName("ext-proc")
@@ -112,7 +174,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 	reqCtx := &RequestContext{}
 	var body []byte
 	var err error
-	headersDeferred := false
 
 	for {
 		select {
@@ -138,56 +199,14 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				return status.Errorf(codes.Internal, "internal error: %v", err)
 			}
 
-			var resp *extProcPb.ProcessingResponse
-			if v.RequestHeaders.EndOfStream {
-				err = s.pickEndpoint(ctx, reqCtx, nil)
-				if err != nil {
-					logger.Error(err, "Failed to pick endpoint")
-					return status.Errorf(codes.Internal, "internal error: %v", err)
-				}
-
-				resp = &extProcPb.ProcessingResponse{
-					Response: &extProcPb.ProcessingResponse_RequestHeaders{
-						RequestHeaders: &extProcPb.HeadersResponse{
-							Response: &extProcPb.CommonResponse{
-								ClearRouteCache: true,
-								HeaderMutation: &extProcPb.HeaderMutation{
-									SetHeaders: []*configPb.HeaderValueOption{
-										{
-											Header: &configPb.HeaderValue{
-												Key:      metadata.DestinationEndpointKey,
-												RawValue: []byte(reqCtx.TargetEndpoint),
-											},
-										},
-										{
-											Header: &configPb.HeaderValue{
-												Key:      "X-Echo-Set-Header",
-												RawValue: []byte(metadata.ConformanceTestResultHeader + ":" + reqCtx.TargetEndpoint),
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-					DynamicMetadata: &structpb.Struct{
-						Fields: map[string]*structpb.Value{
-							metadata.DestinationEndpointNamespace: structpb.NewStructValue(&structpb.Struct{
-								Fields: map[string]*structpb.Value{
-									metadata.DestinationEndpointKey: structpb.NewStringValue(reqCtx.TargetEndpoint),
-								},
-							}),
-						},
-					},
-				}
-			} else {
-				headersDeferred = true
+			err = s.pickEndpoint(ctx, reqCtx, nil)
+			if err != nil {
+				logger.Error(err, "Failed to pick endpoint")
+				return status.Errorf(codes.Internal, "internal error: %v", err)
 			}
 
-			if resp != nil {
-				if err := srv.Send(resp); err != nil {
-					return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
-				}
+			if err := srv.Send(requestHeadersResponse(reqCtx)); err != nil {
+				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
 
 		case *extProcPb.ProcessingRequest_RequestBody:
@@ -199,63 +218,14 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			body = append(body, v.RequestBody.Body...)
 
 			if v.RequestBody.EndOfStream {
-				err = s.pickEndpoint(ctx, reqCtx, body)
-				if err != nil {
-					logger.Error(err, "Failed to pick endpoint")
-					return status.Errorf(codes.Internal, "internal error: %v", err)
-				}
 				body = nil
-
-				if headersDeferred {
-					headerResp := &extProcPb.ProcessingResponse{
-						Response: &extProcPb.ProcessingResponse_RequestHeaders{
-							RequestHeaders: &extProcPb.HeadersResponse{
-								Response: &extProcPb.CommonResponse{
-									ClearRouteCache: true,
-									HeaderMutation: &extProcPb.HeaderMutation{
-										SetHeaders: []*configPb.HeaderValueOption{
-											{
-												Header: &configPb.HeaderValue{
-													Key:      metadata.DestinationEndpointKey,
-													RawValue: []byte(reqCtx.TargetEndpoint),
-												},
-											},
-											{
-												Header: &configPb.HeaderValue{
-													Key:      "X-Echo-Set-Header",
-													RawValue: []byte(metadata.ConformanceTestResultHeader + ":" + reqCtx.TargetEndpoint),
-												},
-											},
-										},
-									},
-								},
-							},
-						},
-						DynamicMetadata: &structpb.Struct{
-							Fields: map[string]*structpb.Value{
-								metadata.DestinationEndpointNamespace: structpb.NewStructValue(&structpb.Struct{
-									Fields: map[string]*structpb.Value{
-										metadata.DestinationEndpointKey: structpb.NewStringValue(reqCtx.TargetEndpoint),
-									},
-								}),
-							},
-						},
-					}
-					if err := srv.Send(headerResp); err != nil {
-						return status.Errorf(codes.Unknown, "failed to send deferred headers response back to Envoy: %v", err)
-					}
-				}
 			}
 
-			for _, commonResp := range envoy.BuildChunkedBodyResponses(v.RequestBody.Body, v.RequestBody.EndOfStream) {
-				resp := &extProcPb.ProcessingResponse{
-					Response: &extProcPb.ProcessingResponse_RequestBody{
-						RequestBody: &extProcPb.BodyResponse{
-							Response: commonResp,
-						},
-					},
+			for _, resp := range s.bodyResponses(v.RequestBody.Body, v.RequestBody.EndOfStream, func(bodyResp *extProcPb.BodyResponse) *extProcPb.ProcessingResponse {
+				return &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_RequestBody{RequestBody: bodyResp},
 				}
-
+			}) {
 				if err := srv.Send(resp); err != nil {
 					return status.Errorf(codes.Unknown, "failed to send body response back to Envoy: %v", err)
 				}
@@ -270,15 +240,11 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 		case *extProcPb.ProcessingRequest_ResponseBody:
 			logger.V(1).Info("Received response body", "endOfStream", v.ResponseBody.EndOfStream)
-			for _, commonResp := range envoy.BuildChunkedBodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream) {
-				resp := &extProcPb.ProcessingResponse{
-					Response: &extProcPb.ProcessingResponse_ResponseBody{
-						ResponseBody: &extProcPb.BodyResponse{
-							Response: commonResp,
-						},
-					},
+			for _, resp := range s.bodyResponses(v.ResponseBody.Body, v.ResponseBody.EndOfStream, func(bodyResp *extProcPb.BodyResponse) *extProcPb.ProcessingResponse {
+				return &extProcPb.ProcessingResponse{
+					Response: &extProcPb.ProcessingResponse_ResponseBody{ResponseBody: bodyResp},
 				}
-
+			}) {
 				if err := srv.Send(resp); err != nil {
 					return status.Errorf(codes.Unknown, "failed to send response body back to Envoy: %v", err)
 				}

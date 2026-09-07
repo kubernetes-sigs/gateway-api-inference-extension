@@ -17,6 +17,8 @@ limitations under the License.
 package server
 
 import (
+	"fmt"
+
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
@@ -25,6 +27,8 @@ const (
 	DefaultGrpcPort       = 9002
 	DefaultGrpcHealthPort = 9003
 	DefaultPoolNamespace  = "default" // default when pool namespace is empty (CLI flag default is empty)
+	BodyModeBuffered      = "buffered"
+	BodyModeFullDuplex    = "full-duplex-streamed"
 )
 
 // Options contains configuration values necessary to create and run the lwepp.
@@ -38,6 +42,7 @@ type Options struct {
 	EndpointTargetPorts []int  // Target ports of model server pods.
 	HealthChecking      bool   // Enables health checking.
 	SecureServing       bool   // Enables TLS on the ext-proc gRPC server.
+	BodyMode            string // Envoy ext-proc body processing mode.
 }
 
 // NewOptions returns a new Options struct initialized with the default values.
@@ -49,6 +54,7 @@ func NewOptions() *Options {
 		EndpointTargetPorts: []int{},
 		MetricsPort:         9090,
 		SecureServing:       true,
+		BodyMode:            BodyModeFullDuplex,
 	}
 }
 
@@ -69,6 +75,7 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&opts.GRPCHealthPort, "grpc-health-port", opts.GRPCHealthPort, "Port for gRPC liveness and readiness probes.")
 	fs.BoolVar(&opts.HealthChecking, "health-checking", opts.HealthChecking, "Enables health checking.")
 	fs.BoolVar(&opts.SecureServing, "secure-serving", opts.SecureServing, "Enables TLS on the ext-proc gRPC server.")
+	fs.StringVar(&opts.BodyMode, "body-mode", opts.BodyMode, "Envoy ext-proc body processing mode: buffered or full-duplex-streamed.")
 }
 
 func (opts *Options) Complete() error {
@@ -77,6 +84,9 @@ func (opts *Options) Complete() error {
 }
 
 func (opts *Options) Validate() error {
+	if opts.BodyMode != BodyModeBuffered && opts.BodyMode != BodyModeFullDuplex {
+		return fmt.Errorf("invalid body mode %q: must be %q or %q", opts.BodyMode, BodyModeBuffered, BodyModeFullDuplex)
+	}
 	return nil
 }
 
