@@ -111,6 +111,8 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 	reqCtx := &RequestContext{}
 	var body []byte
+	// Request body chunks received while the request headers response is still deferred.
+	var pendingBody []byte
 	var err error
 	headersDeferred := false
 
@@ -197,6 +199,16 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 				return status.Errorf(codes.ResourceExhausted, "request body size limit of %d bytes exceeded", maxRequestBodySize)
 			}
 			body = append(body, v.RequestBody.Body...)
+			pendingBody = append(pendingBody, v.RequestBody.Body...)
+
+			// Envoy treats a request body response that arrives before the response to the
+			// request headers as out of order, marks it spurious and tears the stream down.
+			// The endpoint can only be picked once the whole body has arrived, so while the
+			// headers response is still deferred the body chunks are held back and flushed
+			// after it has been sent.
+			if headersDeferred && !v.RequestBody.EndOfStream {
+				continue
+			}
 
 			if v.RequestBody.EndOfStream {
 				err = s.pickEndpoint(ctx, reqCtx, body)
@@ -244,10 +256,11 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					if err := srv.Send(headerResp); err != nil {
 						return status.Errorf(codes.Unknown, "failed to send deferred headers response back to Envoy: %v", err)
 					}
+					headersDeferred = false
 				}
 			}
 
-			for _, commonResp := range envoy.BuildChunkedBodyResponses(v.RequestBody.Body, v.RequestBody.EndOfStream) {
+			for _, commonResp := range envoy.BuildChunkedBodyResponses(pendingBody, v.RequestBody.EndOfStream) {
 				resp := &extProcPb.ProcessingResponse{
 					Response: &extProcPb.ProcessingResponse_RequestBody{
 						RequestBody: &extProcPb.BodyResponse{
@@ -260,6 +273,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 					return status.Errorf(codes.Unknown, "failed to send body response back to Envoy: %v", err)
 				}
 			}
+			pendingBody = nil
 
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			logger.Info("Received response headers")
