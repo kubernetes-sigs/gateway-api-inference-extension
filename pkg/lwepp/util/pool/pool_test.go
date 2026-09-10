@@ -38,7 +38,7 @@ func TestInferencePoolToEndpointPool(t *testing.T) {
 			want:  nil,
 		},
 		{
-			name: "selector, ports and namespace are all carried over",
+			name: "selector, ports, name and namespace are all carried over",
 			input: &v1.InferencePool{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pool-1",
@@ -57,6 +57,7 @@ func TestInferencePoolToEndpointPool(t *testing.T) {
 			want: &datastore.EndpointPool{
 				Selector:    map[string]string{"app": "vllm", "tier": "backend"},
 				TargetPorts: []int{8000, 8001},
+				Name:        "pool-1",
 				Namespace:   "ns-1",
 			},
 		},

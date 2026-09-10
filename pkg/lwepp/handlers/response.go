@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/metadata"
 )
 
-func (s *StreamingServer) handleResponseHeaders(ctx context.Context, fullReq *extProcPb.ProcessingRequest, respHeaders *extProcPb.ProcessingRequest_ResponseHeaders) *extProcPb.ProcessingResponse {
+func (s *StreamingServer) handleResponseHeaders(ctx context.Context, reqCtx *RequestContext, fullReq *extProcPb.ProcessingRequest, respHeaders *extProcPb.ProcessingRequest_ResponseHeaders) *extProcPb.ProcessingResponse {
 	logger := log.FromContext(ctx)
 	logger.Info("Handling response headers")
 
@@ -63,6 +63,34 @@ func (s *StreamingServer) handleResponseHeaders(ctx context.Context, fullReq *ex
 		},
 	}
 
+	// Promote the endpoint this picker selected to a response header of its own.
+	// It is already reflected through the echo server's X-Echo-Set-Header, which
+	// stays as it is, but that path needs a backend which implements it. Reading
+	// the selection and what actually served as separate headers is what lets a
+	// test see a picker whose choice was discarded.
+	if reqCtx != nil && reqCtx.TargetEndpoint != "" {
+		headers = append(headers, &configPb.HeaderValueOption{
+			Header: &configPb.HeaderValue{
+				Key:      metadata.ConformanceTestSelectedHeader,
+				RawValue: []byte(reqCtx.TargetEndpoint),
+			},
+		})
+	}
+
+	// Name the pool this picker fronts. A rule that weights traffic across several
+	// pools must consult each pool's own picker, and the served endpoint alone
+	// cannot show which picker answered: a test would have to infer it from pool
+	// membership, which assumes every endpoint belongs to exactly one pool.
+	if poolName := s.poolName(); poolName != "" {
+		logger.Info("Setting conformance test pool header", "header", metadata.ConformanceTestPoolHeader, "value", poolName)
+		headers = append(headers, &configPb.HeaderValueOption{
+			Header: &configPb.HeaderValue{
+				Key:      metadata.ConformanceTestPoolHeader,
+				RawValue: []byte(poolName),
+			},
+		})
+	}
+
 	// Include any non-system-owned headers from the original response.
 	if respHeaders != nil && respHeaders.ResponseHeaders != nil && respHeaders.ResponseHeaders.Headers != nil {
 		for _, header := range respHeaders.ResponseHeaders.Headers.Headers {
@@ -89,4 +117,19 @@ func (s *StreamingServer) handleResponseHeaders(ctx context.Context, fullReq *ex
 	}
 
 	return resp
+}
+
+// poolName is the name of the pool this picker fronts, or empty when there is none
+// to report: no datastore, a pool that has yet to sync, or one carrying no name.
+// Callers omit the header rather than send an empty one, so every one of those
+// cases is the same answer.
+func (s *StreamingServer) poolName() string {
+	if s.datastore == nil {
+		return ""
+	}
+	pool, err := s.datastore.PoolGet()
+	if err != nil || pool == nil {
+		return ""
+	}
+	return pool.Name
 }
