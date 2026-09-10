@@ -19,4 +19,11 @@ package headers
 const (
 	HeaderTestEppEndPointSelectionKey = "test-epp-endpoint-selection"
 	ConformanceTestResultHeader       = "x-conformance-test-served-endpoint"
+	// ConformanceTestSelectedHeader carries the endpoint the picker selected, as
+	// opposed to ConformanceTestResultHeader which carries the endpoint that served.
+	ConformanceTestSelectedHeader = "x-conformance-test-selected-endpoint"
+	// ConformanceTestPoolHeader carries the name of the InferencePool whose endpoint
+	// picker selected the endpoint, so a test spanning several pools can tell which
+	// pool's picker was consulted.
+	ConformanceTestPoolHeader = "x-conformance-test-epp-pool"
 )
