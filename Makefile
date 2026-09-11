@@ -40,7 +40,13 @@ LWEPP_IMAGE_NAME := lwepp
 LWEPP_IMAGE_REPO ?= $(IMAGE_REGISTRY)/$(LWEPP_IMAGE_NAME)
 LWEPP_IMAGE_TAG ?= $(LWEPP_IMAGE_REPO):$(GIT_TAG)
 BASE_IMAGE ?= gcr.io/distroless/static:nonroot
-BUILDER_IMAGE ?= golang:1.26
+
+# Ensure correct toolchain is used. The authority for the go version should
+# be the one used on go.mod to avoid drift on generated files running on runners
+# with a different go version
+GO_MOD_VERSION = $(shell sed -n 's/^go //p' go.mod)
+export GOTOOLCHAIN=go$(GO_MOD_VERSION)
+BUILDER_IMAGE ?= golang:$(GO_MOD_VERSION)
 ifdef GO_VERSION
 BUILDER_IMAGE = golang:$(GO_VERSION)
 endif
@@ -286,6 +292,10 @@ GOLANGCI_API_LINT = $(LOCALBIN)/golangci-kube-api-linter
 YQ = $(PROJECT_DIR)/bin/yq
 KUBECTL_VALIDATE = $(PROJECT_DIR)/bin/kubectl-validate
 GCI = $(LOCALBIN)/gci
+
+# Ensure correct toolchain is used. There may be differences between required go versions
+# and the version present on prow Pods, and the authority should be the project go.mod
+export GOTOOLCHAIN=go$(shell sed -n 's/^go //p' go.mod)
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.3
