@@ -95,11 +95,11 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 		})
 
 		t.Run("Phase 2: Verify fail-open behavior after EPP becomes unavailable", func(t *testing.T) {
-			t.Logf("Making EPP service %v unavailable...", resources.PrimaryEppServiceNN)
+			t.Logf("Making EPP service %v unavailable...", resources.SecondaryEppServiceNN)
 			timeconfig := config.DefaultInferenceExtensionTimeoutConfig()
-			restore, err := k8sutils.MakeServiceUnavailable(t, s.Client, resources.PrimaryEppServiceNN, timeconfig.ServiceUpdateTimeout)
+			restore, err := k8sutils.MakeServiceUnavailable(t, s.Client, resources.SecondaryEppServiceNN, timeconfig.ServiceUpdateTimeout)
 			t.Cleanup(restore)
-			require.NoError(t, err, "Failed to make the EPP service %v unavailable", resources.PrimaryEppServiceNN)
+			require.NoError(t, err, "Failed to make the EPP service %v unavailable", resources.SecondaryEppServiceNN)
 
 			t.Log("Sending request again, expecting success to verify fail-open...")
 			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
