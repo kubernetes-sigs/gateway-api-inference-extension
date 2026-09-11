@@ -102,6 +102,44 @@ func TestValidateInferencePool(t *testing.T) {
 			},
 			wantErrors: []string{"port number must be unique"},
 		},
+		{
+			desc: "passes validation with an unspecified role defaulting to Serving",
+			mutate: func(ip *v1.InferencePool) {
+				ip.Spec.TargetPorts = []v1.Port{{Number: 8000}}
+			},
+			wantErrors: nil,
+		},
+		{
+			desc: "passes validation with dedicated metrics and health ports alongside a serving port",
+			mutate: func(ip *v1.InferencePool) {
+				ip.Spec.TargetPorts = []v1.Port{
+					{Number: 8000, Role: v1.PortRoleServing},
+					{Number: 9090, Role: v1.PortRoleMetrics},
+					{Number: 8080, Role: v1.PortRoleHealth},
+				}
+			},
+			wantErrors: nil,
+		},
+		{
+			// A pool with no Serving port exposes no inference endpoints, but the API does not
+			// reject it: constraining the shape of targetPorts on a stable API would invalidate
+			// already-stored InferencePools. Consumers handle it via the Serving fallback.
+			desc: "passes validation when no targetPort has the Serving role",
+			mutate: func(ip *v1.InferencePool) {
+				ip.Spec.TargetPorts = []v1.Port{
+					{Number: 9090, Role: v1.PortRoleMetrics},
+					{Number: 8080, Role: v1.PortRoleHealth},
+				}
+			},
+			wantErrors: nil,
+		},
+		{
+			desc: "fails validation with an invalid role value",
+			mutate: func(ip *v1.InferencePool) {
+				ip.Spec.TargetPorts = []v1.Port{{Number: 8000, Role: "bogus"}}
+			},
+			wantErrors: []string{"Unsupported value"},
+		},
 	}
 
 	for _, tc := range testCases {
