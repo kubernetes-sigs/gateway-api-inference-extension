@@ -26,6 +26,9 @@ linters:
     - unparam
     - unused
   settings:
+    goconst:
+      # Repeated literals in table-driven fixtures are the fixtures, not a smell.
+      ignore-tests: true
     revive:
       rules:
         - name: comment-spacings
