@@ -17,7 +17,6 @@ limitations under the License.
 package handlers
 
 import (
-	"context"
 	"testing"
 
 	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
@@ -25,13 +24,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/metadata"
 )
 
 func TestHandleResponseHeaders_MissingEnvoyLBMetadata(t *testing.T) {
 	server := &StreamingServer{}
 
-	resp := server.handleResponseHeaders(context.Background(), nil, &extProcPb.ProcessingRequest_ResponseHeaders{})
+	resp := server.handleResponseHeaders(t.Context(), nil, nil, &extProcPb.ProcessingRequest_ResponseHeaders{})
 
 	setHeaders := resp.GetResponseHeaders().GetResponse().GetHeaderMutation().GetSetHeaders()
 	assert.Len(t, setHeaders, 2)
@@ -56,7 +56,7 @@ func TestHandleResponseHeaders_MissingDestinationEndpointServedKey(t *testing.T)
 		},
 	}
 
-	resp := server.handleResponseHeaders(context.Background(), fullReq, &extProcPb.ProcessingRequest_ResponseHeaders{})
+	resp := server.handleResponseHeaders(t.Context(), nil, fullReq, &extProcPb.ProcessingRequest_ResponseHeaders{})
 
 	setHeaders := resp.GetResponseHeaders().GetResponse().GetHeaderMutation().GetSetHeaders()
 	assert.Len(t, setHeaders, 2)
@@ -81,7 +81,7 @@ func TestHandleResponseHeaders_UsesServedEndpointFromMetadata(t *testing.T) {
 		},
 	}
 
-	resp := server.handleResponseHeaders(context.Background(), fullReq, &extProcPb.ProcessingRequest_ResponseHeaders{})
+	resp := server.handleResponseHeaders(t.Context(), nil, fullReq, &extProcPb.ProcessingRequest_ResponseHeaders{})
 
 	setHeaders := resp.GetResponseHeaders().GetResponse().GetHeaderMutation().GetSetHeaders()
 	assert.Len(t, setHeaders, 2)
@@ -107,7 +107,7 @@ func TestHandleResponseHeaders_ForwardsOriginalHeaders(t *testing.T) {
 		},
 	}
 
-	resp := server.handleResponseHeaders(context.Background(), nil, originalHeaders)
+	resp := server.handleResponseHeaders(t.Context(), nil, nil, originalHeaders)
 
 	setHeaders := resp.GetResponseHeaders().GetResponse().GetHeaderMutation().GetSetHeaders()
 	assert.Len(t, setHeaders, 3)
@@ -115,4 +115,49 @@ func TestHandleResponseHeaders_ForwardsOriginalHeaders(t *testing.T) {
 	assert.Equal(t, "x-went-into-resp-headers", setHeaders[1].GetHeader().GetKey())
 	assert.Equal(t, "x-custom-header", setHeaders[2].GetHeader().GetKey())
 	assert.Equal(t, "custom-value", string(setHeaders[2].GetHeader().GetRawValue()))
+}
+
+func TestResponseHeadersCarryThePoolThatPicked(t *testing.T) {
+	// given a synced pool, the response names the pool this picker speaks for, so a
+	// test spanning several pools can tell which picker answered rather than
+	// inferring it from which pool owns the served endpoint
+	server := NewStreamingServer(&mockDatastore{pool: &datastore.EndpointPool{Name: "primary-inference-pool"}})
+	resp := server.handleResponseHeaders(t.Context(), nil, &extProcPb.ProcessingRequest{}, nil)
+
+	var got string
+	for _, h := range resp.GetResponseHeaders().GetResponse().GetHeaderMutation().GetSetHeaders() {
+		if h.GetHeader().GetKey() == metadata.ConformanceTestPoolHeader {
+			got = string(h.GetHeader().GetRawValue())
+		}
+	}
+	assert.Equal(t, "primary-inference-pool", got)
+
+	// before the datastore syncs a pool there is nothing to name, so the header is
+	// absent rather than empty and consumers must treat it as optional
+	resp = NewStreamingServer(&mockDatastore{}).handleResponseHeaders(t.Context(), nil, &extProcPb.ProcessingRequest{}, nil)
+	for _, h := range resp.GetResponseHeaders().GetResponse().GetHeaderMutation().GetSetHeaders() {
+		assert.NotEqual(t, metadata.ConformanceTestPoolHeader, h.GetHeader().GetKey())
+	}
+}
+
+func TestResponseHeadersPromoteTheSelectedEndpoint(t *testing.T) {
+	// given a picker that chose an endpoint, the choice is reported as a header of
+	// its own rather than only through the echo server, so a test can compare it
+	// against the endpoint that served without relying on the backend to reflect it
+	server := NewStreamingServer(&mockDatastore{pool: &datastore.EndpointPool{Name: "primary-inference-pool"}})
+	reqCtx := &RequestContext{TargetEndpoint: "10.0.0.1:8080"}
+	resp := server.handleResponseHeaders(t.Context(), reqCtx, &extProcPb.ProcessingRequest{}, nil)
+
+	got := map[string]string{}
+	for _, h := range resp.GetResponseHeaders().GetResponse().GetHeaderMutation().GetSetHeaders() {
+		got[h.GetHeader().GetKey()] = string(h.GetHeader().GetRawValue())
+	}
+	assert.Equal(t, "10.0.0.1:8080", got[metadata.ConformanceTestSelectedHeader])
+	assert.Equal(t, "primary-inference-pool", got[metadata.ConformanceTestPoolHeader])
+
+	// nothing was picked, so there is no selection to report
+	resp = server.handleResponseHeaders(t.Context(), &RequestContext{}, &extProcPb.ProcessingRequest{}, nil)
+	for _, h := range resp.GetResponseHeaders().GetResponse().GetHeaderMutation().GetSetHeaders() {
+		assert.NotEqual(t, metadata.ConformanceTestSelectedHeader, h.GetHeader().GetKey())
+	}
 }

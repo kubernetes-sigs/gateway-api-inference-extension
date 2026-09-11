@@ -277,7 +277,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			logger.Info("Received response headers")
-			resp := s.handleResponseHeaders(ctx, req, v)
+			resp := s.handleResponseHeaders(ctx, reqCtx, req, v)
 			if err := srv.Send(resp); err != nil {
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}

@@ -31,10 +31,11 @@ import (
 
 type mockDatastore struct {
 	pods []*datastore.Endpoint
+	pool *datastore.EndpointPool
 }
 
 func (m *mockDatastore) PoolGet() (*datastore.EndpointPool, error) {
-	return nil, nil
+	return m.pool, nil
 }
 
 func (m *mockDatastore) PodList(predicate func(*datastore.Endpoint) bool) []*datastore.Endpoint {
