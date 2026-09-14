@@ -16,7 +16,7 @@ require (
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/stretchr/testify v1.12.1
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.23.0
 	google.golang.org/protobuf v1.36.12 // indirect
 	k8s.io/api v0.36.4
 	k8s.io/apiextensions-apiserver v0.36.4
