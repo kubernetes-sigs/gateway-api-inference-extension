@@ -272,7 +272,7 @@ artifacts: kustomize yq
 	@$(call clean-manifests)
 
 .PHONY: release
-release: artifacts release-quickstart verify test # Create a release.
+release: release-quickstart artifacts verify test # Create a release.
 
 ##@ Dependencies
 
