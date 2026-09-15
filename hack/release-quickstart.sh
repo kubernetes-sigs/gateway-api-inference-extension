@@ -76,16 +76,29 @@ echo "Updating ${CONFORMANCE_GOMOD} and ${CONFORMANCE_GOSUM} ..."
 # Update image references
 # -----------------------------------------------------------------------------
 CONFORMANCE_MANIFESTS="conformance/resources/base.yaml"
-CONFORMANCE_EPP_STAGING_IMAGE="us-central1-docker.pkg.dev/k8s-staging-images/gateway-api-inference-extension/lwepp"
+# Match the EPP image at either registry: on `main` it is pinned to the staging
+# registry, but on a release branch a previous release already rewrote it to
+# registry.k8s.io. Matching only the staging prefix makes every patch release
+# after the first a silent no-op, leaving the manifests on the older tag.
+CONFORMANCE_EPP_IMAGE_REGEX="(us-central1-docker\.pkg\.dev/k8s-staging-images|registry\.k8s\.io)/gateway-api-inference-extension/lwepp"
+CONFORMANCE_EPP_RELEASE_IMAGE="registry.k8s.io/gateway-api-inference-extension/lwepp"
 echo "Updating ${CONFORMANCE_MANIFESTS} ..."
 
-# Update the conformance EPP image from the staging `main` tag to the release tag.
-sed -i.bak -E "s|${CONFORMANCE_EPP_STAGING_IMAGE}:[^\"[:space:]]+|${CONFORMANCE_EPP_STAGING_IMAGE}:${RELEASE_TAG}|g" "$CONFORMANCE_MANIFESTS"
-# Update the container image pull policy.
-sed -i.bak '/us-central1-docker.pkg.dev\/k8s-staging-images\/gateway-api-inference-extension\/lwepp/{n;s/Always/IfNotPresent/;}' "$CONFORMANCE_MANIFESTS"
+# Point the conformance EPP at the promoted release image. `#` is the delimiter
+# because the regex above contains `|`.
+sed -i.bak -E "s#${CONFORMANCE_EPP_IMAGE_REGEX}:[^\"[:space:]]+#${CONFORMANCE_EPP_RELEASE_IMAGE}:${RELEASE_TAG}#g" "$CONFORMANCE_MANIFESTS"
+# A released image is immutable, so it never needs re-pulling.
+sed -i.bak -E "\#${CONFORMANCE_EPP_RELEASE_IMAGE}:#{n;s/Always/IfNotPresent/;}" "$CONFORMANCE_MANIFESTS"
 
-# Update the container registry.
-sed -i.bak -E "s|us-central1-docker\.pkg\.dev/k8s-staging-images|registry.k8s.io|g" "$CONFORMANCE_MANIFESTS"
+# Fail loudly rather than tagging a release whose manifests point at an older EPP.
+# This deliberately matches every EPP reference regardless of registry, rather
+# than reusing the substitution pattern above: a check that only looks where the
+# substitution already ran cannot catch a reference the substitution missed.
+if grep -oE "[^\"[:space:]]*gateway-api-inference-extension/lwepp[^\"[:space:]]*" "$CONFORMANCE_MANIFESTS" |
+  grep -vx "${CONFORMANCE_EPP_RELEASE_IMAGE}:${RELEASE_TAG}"; then
+  echo "ERROR: the EPP references above are not pinned to ${CONFORMANCE_EPP_RELEASE_IMAGE}:${RELEASE_TAG}" >&2
+  exit 1
+fi
 
 
 # -----------------------------------------------------------------------------
