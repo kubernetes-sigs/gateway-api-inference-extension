@@ -37,6 +37,7 @@ func InferencePoolToEndpointPool(inferencePool *v1.InferencePool) *datastore.End
 	endpointPool := &datastore.EndpointPool{
 		Selector:    selector,
 		TargetPorts: targetPorts,
+		Name:        inferencePool.Name,
 		Namespace:   inferencePool.Namespace,
 	}
 	return endpointPool
