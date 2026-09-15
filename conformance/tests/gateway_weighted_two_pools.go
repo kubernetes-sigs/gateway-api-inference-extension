@@ -19,6 +19,7 @@ package tests
 import (
 	"fmt"
 	"math"
+	"net"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -59,6 +60,10 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		const (
 			hostname = "primary.example.com"
 			path     = "/weighted-two-pools-test"
+			// The InferencePool names the manifest declares, which are also what each
+			// pool's endpoint picker reports for itself.
+			primaryPool   = "primary-inference-pool"
+			secondaryPool = "secondary-inference-pool"
 
 			// Sample size so the weight signal dominates random noise.
 			totalRequests      = 200
@@ -112,18 +117,26 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 			secondaryPodIPs = append(secondaryPodIPs, p.Status.PodIP)
 		}
 
+		// Map Kubernetes pod IPs to the pod names reported by the echo backends.
+		podByIP := make(map[string]string, len(primaryPodIPs)+len(secondaryPodIPs))
+		for i, ip := range primaryPodIPs {
+			podByIP[ip] = primaryPodNames[i]
+		}
+		for i, ip := range secondaryPodIPs {
+			podByIP[ip] = secondaryPodNames[i]
+		}
+
 		// Provide a union list of eligible endpoints for the test. Each pool's EPP
 		// should filter to endpoints that actually belong to its pool.
 		allIPs := append(append([]string{}, primaryPodIPs...), secondaryPodIPs...)
 		eppHeaderValue := strings.Join(allIPs, ",")
 
-		// Warm up every pod individually across both pools to guarantee that GFE
-		// backend health checks and NEGs for both pools are 100% healthy before kicking off concurrent traffic.
+		// Warm each backend to let health checks and NEGs settle. Failure is logged
+		// so the measured requests can still report routing errors.
 		allPods := append(append([]corev1.Pod{}, primaryPods...), secondaryPods...)
 		for _, pod := range allPods {
-			pod := pod
 			t.Logf("Warming up pod %s (%s)", pod.Name, pod.Status.PodIP)
-			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
+			warmUpErr := warmUpBackend(
 				t,
 				s.RoundTripper,
 				s.TimeoutConfig,
@@ -145,6 +158,10 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 					Namespace: resources.AppBackendNamespace,
 				},
 			)
+			if warmUpErr != nil {
+				t.Logf("WARNING: warm-up for pod %s (%s) failed: %v; continuing to routing assertions",
+					pod.Name, pod.Status.PodIP, warmUpErr)
+			}
 		}
 
 		requestBody := `{
@@ -155,6 +172,7 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		// Build quick lookup sets for attributing each hit to a pool by backend pod name.
 		primarySet := sets.New(primaryPodNames...)
 		secondarySet := sets.New(secondaryPodNames...)
+
 		headersMap := map[string]string{
 			headers.HeaderTestEppEndPointSelectionKey: eppHeaderValue,
 		}
@@ -186,14 +204,31 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 					if err == nil {
 						compErr := gwhttp.CompareRoundTrip(t, &req, cReq, cRes, expected)
 						if compErr == nil {
-							if primarySet.Has(cReq.Pod) {
-								primaryHits.Add(1)
-								return nil
-							} else if secondarySet.Has(cReq.Pod) {
-								secondaryHits.Add(1)
-								return nil
+							var servedPool string
+							switch {
+							case primarySet.Has(cReq.Pod):
+								servedPool = primaryPool
+							case secondarySet.Has(cReq.Pod):
+								servedPool = secondaryPool
+							default:
+								return fmt.Errorf("request was handled by unexpected pod %q (not in either pool)", cReq.Pod)
 							}
-							return fmt.Errorf("request was handled by unexpected pod %q (not in either pool)", cReq.Pod)
+							var respHeaders map[string][]string
+							if cRes != nil {
+								respHeaders = cRes.Headers
+							}
+							if err := checkEndpointPickerPool(respHeaders, servedPool, cReq.Pod); err != nil {
+								return err
+							}
+							if err := checkSelectionHonoured(respHeaders, podByIP, cReq.Pod); err != nil {
+								return err
+							}
+							if servedPool == primaryPool {
+								primaryHits.Add(1)
+							} else {
+								secondaryHits.Add(1)
+							}
+							return nil
 						}
 						if cRes != nil && (cRes.StatusCode == http.StatusNotFound || cRes.StatusCode == http.StatusServiceUnavailable) {
 							// Transient unconverged GFE instance; back off and retry
@@ -235,4 +270,69 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		t.Logf("Weighted split OK: primary=%.3f (hits=%d/%d), expected=%.3f, tolerance=±%.3f; secondary hits=%d",
 			observedPrimary, int64(ph), int64(total), expectedPrimary, absTolerance, int64(sh))
 	},
+}
+
+// checkEndpointPickerPool compares the pool reported by the picker with the pool
+// of the responding pod. The two pools in this test have separate pickers.
+//
+// The weighted split can still be correct if the gateway consults the wrong picker
+// and then load balances within the intended pool. ConformanceTestPoolHeader exposes
+// that mismatch. Missing pool headers skip this check.
+func checkEndpointPickerPool(respHeaders map[string][]string, servedPool, servedPod string) error {
+	picked := firstHeaderValue(respHeaders, headers.ConformanceTestPoolHeader)
+	if picked == "" {
+		return nil
+	}
+	if picked != servedPool {
+		return fmt.Errorf(
+			"endpoint picker for pool %q was consulted for a request served by pool %q "+
+				"(pod %q answered). Each pool's EPP must be consulted for the traffic "+
+				"routed to that pool",
+			picked, servedPool, servedPod)
+	}
+	return nil
+}
+
+// checkSelectionHonoured checks that the IP in ConformanceTestSelectedHeader belongs
+// to the pod identified by the backend's response body. This detects a discarded
+// selection even when another pod in the same pool answers.
+//
+// The IP-to-pod mapping comes from Kubernetes, so the check does not depend on the
+// gateway's served-endpoint header. This check compares pod identity and does not
+// validate the selected port. Missing selection headers and unknown IPs skip the check.
+func checkSelectionHonoured(respHeaders map[string][]string, podByIP map[string]string, servedPod string) error {
+	selected := firstHeaderValue(respHeaders, headers.ConformanceTestSelectedHeader)
+	if selected == "" {
+		return nil
+	}
+	host, _, err := net.SplitHostPort(selected)
+	if err != nil {
+		host = selected
+	}
+	selectedPod, known := podByIP[host]
+	if !known {
+		return nil
+	}
+	if selectedPod != servedPod {
+		return fmt.Errorf(
+			"endpoint picker selected %q (pod %q) but pod %q answered. A gateway must "+
+				"route to the endpoint its picker chose rather than load balancing over "+
+				"the pool",
+			selected, selectedPod, servedPod)
+	}
+	return nil
+}
+
+// firstHeaderValue reads a response header under either casing, since the capture path
+// does not canonicalise consistently, and returns the first comma-separated entry.
+func firstHeaderValue(respHeaders map[string][]string, name string) string {
+	values, ok := respHeaders[http.CanonicalHeaderKey(name)]
+	if !ok {
+		values, ok = respHeaders[name]
+	}
+	if !ok || len(values) == 0 {
+		return ""
+	}
+	first, _, _ := strings.Cut(values[0], ",")
+	return strings.TrimSpace(first)
 }
