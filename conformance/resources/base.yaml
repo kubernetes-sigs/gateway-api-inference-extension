@@ -249,7 +249,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: registry.k8s.io/gateway-api-inference-extension/lwepp:v1.6.0
+        image: registry.k8s.io/gateway-api-inference-extension/lwepp:v1.6.1
         imagePullPolicy: IfNotPresent
         args:
         - --pool-name
@@ -336,7 +336,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: registry.k8s.io/gateway-api-inference-extension/lwepp:v1.6.0
+        image: registry.k8s.io/gateway-api-inference-extension/lwepp:v1.6.1
         imagePullPolicy: IfNotPresent
         args:
         - --pool-name
@@ -423,7 +423,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: registry.k8s.io/gateway-api-inference-extension/lwepp:v1.6.0
+        image: registry.k8s.io/gateway-api-inference-extension/lwepp:v1.6.1
         imagePullPolicy: IfNotPresent
         args:
         - --pool-name
@@ -510,7 +510,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: registry.k8s.io/gateway-api-inference-extension/lwepp:v1.6.0
+        image: registry.k8s.io/gateway-api-inference-extension/lwepp:v1.6.1
         imagePullPolicy: IfNotPresent
         args:
         - --pool-name
@@ -708,7 +708,7 @@ spec:
       terminationGracePeriodSeconds: 130
       containers:
       - name: epp
-        image: registry.k8s.io/gateway-api-inference-extension/lwepp:v1.6.0
+        image: registry.k8s.io/gateway-api-inference-extension/lwepp:v1.6.1
         imagePullPolicy: IfNotPresent
         args:
         - --pool-name
