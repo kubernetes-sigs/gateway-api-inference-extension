@@ -27,7 +27,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
@@ -117,36 +116,6 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 		allIPs := append(append([]string{}, primaryPodIPs...), secondaryPodIPs...)
 		eppHeaderValue := strings.Join(allIPs, ",")
 
-		// Warm up every pod individually across both pools to guarantee that GFE
-		// backend health checks and NEGs for both pools are 100% healthy before kicking off concurrent traffic.
-		allPods := append(append([]corev1.Pod{}, primaryPods...), secondaryPods...)
-		for _, pod := range allPods {
-			pod := pod
-			t.Logf("Warming up pod %s (%s)", pod.Name, pod.Status.PodIP)
-			gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
-				t,
-				s.RoundTripper,
-				s.TimeoutConfig,
-				gwAddr,
-				gwhttp.ExpectedResponse{
-					Request: gwhttp.Request{
-						Host:   hostname,
-						Path:   path,
-						Method: http.MethodPost,
-						Body:   `{"model":"conformance-fake-model","prompt":"Warmup"}`,
-						Headers: map[string]string{
-							headers.HeaderTestEppEndPointSelectionKey: pod.Status.PodIP + ":3000",
-						},
-					},
-					Response: gwhttp.Response{
-						StatusCodes: []int{http.StatusOK},
-					},
-					Backend:   pod.Name,
-					Namespace: resources.AppBackendNamespace,
-				},
-			)
-		}
-
 		requestBody := `{
 			"model": "conformance-fake-model",
 			"prompt": "Write as if you were a critic: San Francisco"
@@ -171,6 +140,9 @@ var GatewayWeightedAcrossTwoInferencePools = suite.ConformanceTest{
 			},
 			Namespace: resources.AppBackendNamespace,
 		}
+		// Warm up with endpoints from both pools so either weighted backend choice can
+		// succeed. Pinning a single pod here would require consecutive random
+		// selections of its pool rather than checking readiness.
 		gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(t, s.RoundTripper, s.TimeoutConfig, gwAddr, expected)
 
 		var primaryHits, secondaryHits atomic.Int64
