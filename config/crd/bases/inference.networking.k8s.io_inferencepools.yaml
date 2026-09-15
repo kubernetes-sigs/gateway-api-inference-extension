@@ -119,6 +119,30 @@ spec:
                         maximum: 65535
                         minimum: 1
                         type: integer
+                      role:
+                        default: Serving
+                        description: |-
+                          Role designates the function this port serves for the InferencePool.
+
+                          If unspecified, the role defaults to "Serving".
+
+                          Supported values include:
+                          * "Serving": the port used for inference traffic. This is the default. Only ports with
+                            this role are treated as distinctive endpoints addressable as a 'podIP:portNumber'
+                            combination; a pool with no "Serving" port exposes no inference endpoints.
+                          * "Metrics": the port model server metrics are scraped from. Consumers that scrape
+                            metrics should prefer a port with this role and fall back to the "Serving" port
+                            when none is present.
+                          * "Health": the port used for liveness/readiness probing. Consumers that perform health
+                            checks should prefer a port with this role and fall back to the "Serving" port when
+                            none is present.
+
+                          Multiple ports may share a role, and a single port entry has exactly one role.
+                        enum:
+                        - Serving
+                        - Metrics
+                        - Health
+                        type: string
                     required:
                     - number
                     type: object
@@ -184,6 +208,30 @@ spec:
                       maximum: 65535
                       minimum: 1
                       type: integer
+                    role:
+                      default: Serving
+                      description: |-
+                        Role designates the function this port serves for the InferencePool.
+
+                        If unspecified, the role defaults to "Serving".
+
+                        Supported values include:
+                        * "Serving": the port used for inference traffic. This is the default. Only ports with
+                          this role are treated as distinctive endpoints addressable as a 'podIP:portNumber'
+                          combination; a pool with no "Serving" port exposes no inference endpoints.
+                        * "Metrics": the port model server metrics are scraped from. Consumers that scrape
+                          metrics should prefer a port with this role and fall back to the "Serving" port
+                          when none is present.
+                        * "Health": the port used for liveness/readiness probing. Consumers that perform health
+                          checks should prefer a port with this role and fall back to the "Serving" port when
+                          none is present.
+
+                        Multiple ports may share a role, and a single port entry has exactly one role.
+                      enum:
+                      - Serving
+                      - Metrics
+                      - Health
+                      type: string
                   required:
                   - number
                   type: object
