@@ -34,11 +34,39 @@ import (
 )
 
 // InferencePoolInformer provides access to a shared informer and lister for
-// InferencePools.
+// InferencePools. Prefer using the type-safe variant (see [TypedInferencePoolInformer]).
 type InferencePoolInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() apiv1.InferencePoolLister
 }
+
+// TypedInferencePoolInformer provides access to a shared informer and lister for
+// InferencePools, including the type-safe TypedInformer variant.
+// It is a superset of InferencePoolInformer.
+type TypedInferencePoolInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() InferencePoolIndexInformer
+	Lister() apiv1.InferencePoolLister
+}
+
+// InferencePoolIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type InferencePoolIndexInformer cache.TypedSharedIndexInformer[*gatewayapiinferenceextensionapiv1.InferencePool]
+
+// InferencePoolHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for InferencePool.
+type InferencePoolHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*gatewayapiinferenceextensionapiv1.InferencePool]
+
+// InferencePoolDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for InferencePool.
+type InferencePoolDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*gatewayapiinferenceextensionapiv1.InferencePool]
+
+// InferencePoolFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for InferencePool.
+type InferencePoolFilteringHandler = cache.TypedFilteringResourceEventHandler[*gatewayapiinferenceextensionapiv1.InferencePool]
+
+// InferencePoolIndexers is a specialization of [cache.TypedIndexers] for InferencePool.
+type InferencePoolIndexers = cache.TypedIndexers[*gatewayapiinferenceextensionapiv1.InferencePool]
+
+// DeletedInferencePool is a specialization of [cache.DeletedObject] for InferencePool.
+type DeletedInferencePool = cache.DeletedObject[*gatewayapiinferenceextensionapiv1.InferencePool]
 
 type inferencePoolInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -49,25 +77,49 @@ type inferencePoolInformer struct {
 // NewInferencePoolInformer constructs a new informer for InferencePool type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedInferencePoolInformer]).
 func NewInferencePoolInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewInferencePoolInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedInferencePoolInformer constructs a new informer for InferencePool type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedInferencePoolInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers InferencePoolIndexers) InferencePoolIndexInformer {
+	return NewTypedInferencePoolInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredInferencePoolInformer constructs a new informer for InferencePool type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredInferencePoolInformer]).
 func NewFilteredInferencePoolInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewInferencePoolInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedInferencePoolInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredInferencePoolInformer constructs a new informer for InferencePool type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredInferencePoolInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers InferencePoolIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) InferencePoolIndexInformer {
+	return NewTypedInferencePoolInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewInferencePoolInformerWithOptions constructs a new informer for InferencePool type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedInferencePoolInformerWithOptions]).
 func NewInferencePoolInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedInferencePoolInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedInferencePoolInformerWithOptions constructs a new informer for InferencePool type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedInferencePoolInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) InferencePoolIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "inference.networking.k8s.io", Version: "v1", Resource: "inferencepools"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*gatewayapiinferenceextensionapiv1.InferencePool](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -100,17 +152,57 @@ func NewInferencePoolInformerWithOptions(client versioned.Interface, namespace s
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *inferencePoolInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewInferencePoolInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedInferencePoolInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *inferencePoolInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&gatewayapiinferenceextensionapiv1.InferencePool{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *inferencePoolInformer) TypedInformer() InferencePoolIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*gatewayapiinferenceextensionapiv1.InferencePool](f.factory.InformerFor(&gatewayapiinferenceextensionapiv1.InferencePool{}, f.defaultInformer))
 }
 
 func (f *inferencePoolInformer) Lister() apiv1.InferencePoolLister {
 	return apiv1.NewInferencePoolLister(f.Informer().GetIndexer())
+}
+
+// ToTypedInferencePoolInformer converts an untyped informer into a TypedInferencePoolInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *InferencePool. If that is not the case, calling type-safe methods of the returned
+// TypedInferencePoolInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedInferencePoolInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedInferencePoolInformer(informer InferencePoolInformer) TypedInferencePoolInformer {
+	if informer, ok := informer.(TypedInferencePoolInformer); ok {
+		return informer
+	}
+	return &inferencePoolTypedInformerAdapter{informer}
+}
+
+type inferencePoolTypedInformerAdapter struct {
+	InferencePoolInformer
+}
+
+func (a *inferencePoolTypedInformerAdapter) TypedInformer() InferencePoolIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*gatewayapiinferenceextensionapiv1.InferencePool](a.Informer())
+}
+
+// ToInferencePoolIndexInformer converts an untyped informer into a InferencePoolIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *InferencePool. If that is not the case, calling type-safe methods of the returned
+// InferencePoolIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a InferencePoolIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToInferencePoolIndexInformer(informer cache.SharedIndexInformer) InferencePoolIndexInformer {
+	if informer, ok := informer.(InferencePoolIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*gatewayapiinferenceextensionapiv1.InferencePool](informer)
 }

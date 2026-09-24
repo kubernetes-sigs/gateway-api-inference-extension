@@ -34,11 +34,39 @@ import (
 )
 
 // InferencePoolImportInformer provides access to a shared informer and lister for
-// InferencePoolImports.
+// InferencePoolImports. Prefer using the type-safe variant (see [TypedInferencePoolImportInformer]).
 type InferencePoolImportInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() apixv1alpha1.InferencePoolImportLister
 }
+
+// TypedInferencePoolImportInformer provides access to a shared informer and lister for
+// InferencePoolImports, including the type-safe TypedInformer variant.
+// It is a superset of InferencePoolImportInformer.
+type TypedInferencePoolImportInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() InferencePoolImportIndexInformer
+	Lister() apixv1alpha1.InferencePoolImportLister
+}
+
+// InferencePoolImportIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type InferencePoolImportIndexInformer cache.TypedSharedIndexInformer[*gatewayapiinferenceextensionapixv1alpha1.InferencePoolImport]
+
+// InferencePoolImportHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for InferencePoolImport.
+type InferencePoolImportHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*gatewayapiinferenceextensionapixv1alpha1.InferencePoolImport]
+
+// InferencePoolImportDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for InferencePoolImport.
+type InferencePoolImportDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*gatewayapiinferenceextensionapixv1alpha1.InferencePoolImport]
+
+// InferencePoolImportFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for InferencePoolImport.
+type InferencePoolImportFilteringHandler = cache.TypedFilteringResourceEventHandler[*gatewayapiinferenceextensionapixv1alpha1.InferencePoolImport]
+
+// InferencePoolImportIndexers is a specialization of [cache.TypedIndexers] for InferencePoolImport.
+type InferencePoolImportIndexers = cache.TypedIndexers[*gatewayapiinferenceextensionapixv1alpha1.InferencePoolImport]
+
+// DeletedInferencePoolImport is a specialization of [cache.DeletedObject] for InferencePoolImport.
+type DeletedInferencePoolImport = cache.DeletedObject[*gatewayapiinferenceextensionapixv1alpha1.InferencePoolImport]
 
 type inferencePoolImportInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -49,25 +77,49 @@ type inferencePoolImportInformer struct {
 // NewInferencePoolImportInformer constructs a new informer for InferencePoolImport type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedInferencePoolImportInformer]).
 func NewInferencePoolImportInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewInferencePoolImportInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedInferencePoolImportInformer constructs a new informer for InferencePoolImport type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedInferencePoolImportInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers InferencePoolImportIndexers) InferencePoolImportIndexInformer {
+	return NewTypedInferencePoolImportInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredInferencePoolImportInformer constructs a new informer for InferencePoolImport type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredInferencePoolImportInformer]).
 func NewFilteredInferencePoolImportInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewInferencePoolImportInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedInferencePoolImportInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredInferencePoolImportInformer constructs a new informer for InferencePoolImport type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredInferencePoolImportInformer(client versioned.Interface, namespace string, resyncPeriod time.Duration, indexers InferencePoolImportIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) InferencePoolImportIndexInformer {
+	return NewTypedInferencePoolImportInformerWithOptions(client, namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewInferencePoolImportInformerWithOptions constructs a new informer for InferencePoolImport type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedInferencePoolImportInformerWithOptions]).
 func NewInferencePoolImportInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedInferencePoolImportInformerWithOptions(client, namespace, options)
+}
+
+// NewTypedInferencePoolImportInformerWithOptions constructs a new informer for InferencePoolImport type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedInferencePoolImportInformerWithOptions(client versioned.Interface, namespace string, options internalinterfaces.InformerOptions) InferencePoolImportIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "inference.networking.x-k8s.io", Version: "v1alpha1", Resource: "inferencepoolimports"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*gatewayapiinferenceextensionapixv1alpha1.InferencePoolImport](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -100,17 +152,57 @@ func NewInferencePoolImportInformerWithOptions(client versioned.Interface, names
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *inferencePoolImportInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewInferencePoolImportInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedInferencePoolImportInformerWithOptions(client, f.namespace, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *inferencePoolImportInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&gatewayapiinferenceextensionapixv1alpha1.InferencePoolImport{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *inferencePoolImportInformer) TypedInformer() InferencePoolImportIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*gatewayapiinferenceextensionapixv1alpha1.InferencePoolImport](f.factory.InformerFor(&gatewayapiinferenceextensionapixv1alpha1.InferencePoolImport{}, f.defaultInformer))
 }
 
 func (f *inferencePoolImportInformer) Lister() apixv1alpha1.InferencePoolImportLister {
 	return apixv1alpha1.NewInferencePoolImportLister(f.Informer().GetIndexer())
+}
+
+// ToTypedInferencePoolImportInformer converts an untyped informer into a TypedInferencePoolImportInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *InferencePoolImport. If that is not the case, calling type-safe methods of the returned
+// TypedInferencePoolImportInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedInferencePoolImportInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedInferencePoolImportInformer(informer InferencePoolImportInformer) TypedInferencePoolImportInformer {
+	if informer, ok := informer.(TypedInferencePoolImportInformer); ok {
+		return informer
+	}
+	return &inferencePoolImportTypedInformerAdapter{informer}
+}
+
+type inferencePoolImportTypedInformerAdapter struct {
+	InferencePoolImportInformer
+}
+
+func (a *inferencePoolImportTypedInformerAdapter) TypedInformer() InferencePoolImportIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*gatewayapiinferenceextensionapixv1alpha1.InferencePoolImport](a.Informer())
+}
+
+// ToInferencePoolImportIndexInformer converts an untyped informer into a InferencePoolImportIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *InferencePoolImport. If that is not the case, calling type-safe methods of the returned
+// InferencePoolImportIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a InferencePoolImportIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToInferencePoolImportIndexInformer(informer cache.SharedIndexInformer) InferencePoolImportIndexInformer {
+	if informer, ok := informer.(InferencePoolImportIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*gatewayapiinferenceextensionapixv1alpha1.InferencePoolImport](informer)
 }

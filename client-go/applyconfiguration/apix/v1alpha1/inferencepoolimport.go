@@ -29,7 +29,7 @@ import (
 //
 // InferencePoolImport is the Schema for the InferencePoolImports API.
 type InferencePoolImportApplyConfiguration struct {
-	v1.TypeMetaApplyConfiguration    `json:",inline"`
+	v1.TypeMetaApplyConfiguration    `json:""`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	// Status defines the observed state of the InferencePoolImport.
 	Status *InferencePoolImportStatusApplyConfiguration `json:"status,omitempty"`
