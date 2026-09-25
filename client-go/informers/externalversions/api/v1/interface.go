@@ -25,7 +25,7 @@ import (
 // Interface provides access to all the informers in this group version.
 type Interface interface {
 	// InferencePools returns a InferencePoolInformer.
-	InferencePools() InferencePoolInformer
+	InferencePools() TypedInferencePoolInformer
 }
 
 type version struct {
@@ -39,7 +39,7 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
-// InferencePools returns a InferencePoolInformer.
-func (v *version) InferencePools() InferencePoolInformer {
+// InferencePools returns a TypedInferencePoolInformer.
+func (v *version) InferencePools() TypedInferencePoolInformer {
 	return &inferencePoolInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }

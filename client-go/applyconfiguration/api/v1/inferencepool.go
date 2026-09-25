@@ -31,7 +31,7 @@ import (
 //
 // TODO: change the annotation once it gets officially approved
 type InferencePoolApplyConfiguration struct {
-	metav1.TypeMetaApplyConfiguration    `json:",inline"`
+	metav1.TypeMetaApplyConfiguration    `json:""`
 	*metav1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	// Spec defines the desired state of the InferencePool.
 	Spec *InferencePoolSpecApplyConfiguration `json:"spec,omitempty"`
