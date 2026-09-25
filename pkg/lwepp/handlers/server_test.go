@@ -24,7 +24,10 @@ import (
 	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/structpb"
+	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/metadata"
@@ -56,12 +59,78 @@ func (m *mockProcessServer) Recv() (*extProcPb.ProcessingRequest, error) {
 	return msg, nil
 }
 
+func TestProcess_ReportsSelectedAndServedEndpoints(t *testing.T) {
+	const selectedIP = "10.0.0.1"
+	for _, withBody := range []bool{false, true} {
+		name := "without body"
+		if withBody {
+			name = "with body"
+		}
+		t.Run(name, func(t *testing.T) {
+			server := NewStreamingServer(&mockDatastore{
+				pods: []*datastore.Endpoint{{Address: selectedIP, Port: "8080"}},
+			}, types.NamespacedName{Namespace: testPoolNamespace, Name: testPoolName})
+			stream := &mockProcessServer{
+				ctx: t.Context(),
+				recvMessages: []*extProcPb.ProcessingRequest{{
+					Request: &extProcPb.ProcessingRequest_RequestHeaders{
+						RequestHeaders: &extProcPb.HttpHeaders{
+							Headers:     &envoyCorev3.HeaderMap{},
+							EndOfStream: !withBody,
+						},
+					},
+				}},
+			}
+			if withBody {
+				stream.recvMessages = append(stream.recvMessages, &extProcPb.ProcessingRequest{
+					Request: &extProcPb.ProcessingRequest_RequestBody{
+						RequestBody: &extProcPb.HttpBody{
+							Body: []byte(`{"prompt":"hello"}`), EndOfStream: true,
+						},
+					},
+				})
+			}
+			stream.recvMessages = append(stream.recvMessages, &extProcPb.ProcessingRequest{
+				Request: &extProcPb.ProcessingRequest_ResponseHeaders{
+					ResponseHeaders: &extProcPb.HttpHeaders{EndOfStream: true},
+				},
+				MetadataContext: &envoyCorev3.Metadata{
+					FilterMetadata: map[string]*structpb.Struct{
+						metadata.DestinationEndpointNamespace: {
+							Fields: map[string]*structpb.Value{
+								metadata.DestinationEndpointServedKey: structpb.NewStringValue("10.0.0.2:8080"),
+							},
+						},
+					},
+				},
+			})
+
+			require.NoError(t, server.Process(stream))
+			require.NotEmpty(t, stream.sentMessages)
+			requestHeaders := stream.sentMessages[0].GetRequestHeaders().GetResponse().GetHeaderMutation().GetSetHeaders()
+			require.Len(t, requestHeaders, 1, "only the routing header should be set; no echo instruction")
+			assert.Equal(t, metadata.DestinationEndpointKey, requestHeaders[0].GetHeader().GetKey())
+			assert.Equal(t, "10.0.0.1:8080", string(requestHeaders[0].GetHeader().GetRawValue()))
+
+			response := stream.sentMessages[len(stream.sentMessages)-1].GetResponseHeaders()
+			require.NotNil(t, response)
+			got := map[string]string{}
+			for _, h := range response.GetResponse().GetHeaderMutation().GetSetHeaders() {
+				got[h.GetHeader().GetKey()] = string(h.GetHeader().GetRawValue())
+			}
+			assert.Equal(t, "10.0.0.1:8080", got[metadata.ConformanceTestSelectedHeader])
+			assert.Equal(t, "10.0.0.2:8080", got[metadata.ConformanceTestResultHeader])
+			assert.Equal(t, "test/pool", got[metadata.ConformanceTestPoolHeader])
+		})
+	}
+}
+
 func TestProcess_DeferredHeaderMutationOnStreamingBody(t *testing.T) {
 	pods := []*datastore.Endpoint{
 		{Address: "10.0.0.1", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	// Construct a standard Envoy request stream:
 	// 1. Request headers (with EndOfStream = false)
@@ -116,11 +185,9 @@ func TestProcess_DeferredHeaderMutationOnStreamingBody(t *testing.T) {
 		require.NotNil(firstResp, "First response must be a RequestHeaders frame")
 
 		setHeaders := firstResp.GetResponse().GetHeaderMutation().GetSetHeaders()
-		require.Len(setHeaders, 2)
+		require.Len(setHeaders, 1)
 		assert.Equal(t, metadata.DestinationEndpointKey, setHeaders[0].GetHeader().GetKey())
 		assert.Equal(t, "10.0.0.1:8080", string(setHeaders[0].GetHeader().GetRawValue()))
-		assert.Equal(t, "X-Echo-Set-Header", setHeaders[1].GetHeader().GetKey())
-		assert.Equal(t, metadata.ConformanceTestResultHeader+":10.0.0.1:8080", string(setHeaders[1].GetHeader().GetRawValue()))
 
 		// Response 2: RequestBody Response
 		secondResp := stream.sentMessages[1].GetRequestBody()
@@ -153,7 +220,7 @@ func TestProcess_DeferredHeaderMutationOnChunkedStreamingBody(t *testing.T) {
 		{Address: "10.0.0.1", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	reqHeaders := &extProcPb.ProcessingRequest{
 		Request: &extProcPb.ProcessingRequest_RequestHeaders{
@@ -210,7 +277,7 @@ func TestProcess_DeferredHeaderMutationOnChunkedStreamingBody(t *testing.T) {
 	// One headers response and one body response carrying the reassembled body.
 	if require.Len(stream.sentMessages, 2) {
 		setHeaders := stream.sentMessages[0].GetRequestHeaders().GetResponse().GetHeaderMutation().GetSetHeaders()
-		require.Len(setHeaders, 2)
+		require.Len(setHeaders, 1)
 		assert.Equal(t, metadata.DestinationEndpointKey, setHeaders[0].GetHeader().GetKey())
 		assert.Equal(t, "10.0.0.1:8080", string(setHeaders[0].GetHeader().GetRawValue()))
 

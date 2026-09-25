@@ -24,6 +24,7 @@ import (
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/types/known/structpb"
+	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/metadata"
@@ -31,11 +32,10 @@ import (
 
 type mockDatastore struct {
 	pods []*datastore.Endpoint
-	pool *datastore.EndpointPool
 }
 
 func (m *mockDatastore) PoolGet() (*datastore.EndpointPool, error) {
-	return m.pool, nil
+	return nil, nil
 }
 
 func (m *mockDatastore) PodList(predicate func(*datastore.Endpoint) bool) []*datastore.Endpoint {
@@ -54,7 +54,7 @@ func TestHandleRequestHeaders_RoundRobin(t *testing.T) {
 		{Address: "10.0.0.2", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	req := &extProcPb.ProcessingRequest_RequestHeaders{
 		RequestHeaders: &extProcPb.HttpHeaders{
@@ -95,7 +95,7 @@ func TestHandleRequestHeaders_FilteringViaHeader(t *testing.T) {
 		{Address: "10.0.0.3", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	req := &extProcPb.ProcessingRequest_RequestHeaders{
 		RequestHeaders: &extProcPb.HttpHeaders{
@@ -117,7 +117,7 @@ func TestHandleRequestHeaders_FilteringViaHeader(t *testing.T) {
 
 func TestHandleRequestHeaders_NoPods(t *testing.T) {
 	ds := &mockDatastore{pods: []*datastore.Endpoint{}}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	req := &extProcPb.ProcessingRequest_RequestHeaders{
 		RequestHeaders: &extProcPb.HttpHeaders{
@@ -137,7 +137,7 @@ func TestHandleRequestHeaders_FilteringViaFilterMetadata(t *testing.T) {
 		{Address: "10.0.0.3", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	fullReq := &extProcPb.ProcessingRequest{
 		MetadataContext: &envoyCorev3.Metadata{
@@ -175,7 +175,7 @@ func TestHandleRequestHeaders_FilteringViaFilterMetadata_StringValue(t *testing.
 		{Address: "10.0.0.3", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	fullReq := &extProcPb.ProcessingRequest{
 		MetadataContext: &envoyCorev3.Metadata{
@@ -209,7 +209,7 @@ func TestHandleRequestHeaders_HeaderTakesPrecedenceOverMetadata(t *testing.T) {
 		{Address: "10.0.0.3", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	fullReq := &extProcPb.ProcessingRequest{
 		MetadataContext: &envoyCorev3.Metadata{
@@ -251,7 +251,7 @@ func TestHandleRequestHeaders_DuplicateHeadersArePreserved(t *testing.T) {
 		{Address: "10.0.0.1", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	req := &extProcPb.ProcessingRequest_RequestHeaders{
 		RequestHeaders: &extProcPb.HttpHeaders{
@@ -281,7 +281,7 @@ func TestHandleRequestHeaders_NoSubsetMetadataReturnsAllPods(t *testing.T) {
 		{Address: "10.0.0.2", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	req := &extProcPb.ProcessingRequest_RequestHeaders{
 		RequestHeaders: &extProcPb.HttpHeaders{
@@ -304,7 +304,7 @@ func TestHandleRequestHeaders_MetadataNamespaceEmptyReturnsAllPods(t *testing.T)
 		{Address: "10.0.0.2", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	fullReq := &extProcPb.ProcessingRequest{
 		MetadataContext: &envoyCorev3.Metadata{
@@ -339,7 +339,7 @@ func TestHandleRequestHeaders_SubsetFilterEmptyReturnsNoPods(t *testing.T) {
 		{Address: "10.0.0.2", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	fullReq := &extProcPb.ProcessingRequest{
 		MetadataContext: &envoyCorev3.Metadata{
@@ -376,7 +376,7 @@ func TestHandleRequestHeaders_StringMetadataMalformedWhitespaceTrimming(t *testi
 		{Address: "10.0.0.3", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	fullReq := &extProcPb.ProcessingRequest{
 		MetadataContext: &envoyCorev3.Metadata{
@@ -411,7 +411,7 @@ func TestHandleRequestHeaders_StringMetadataNoMatchesReturnsNoPods(t *testing.T)
 		{Address: "10.0.0.2", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	fullReq := &extProcPb.ProcessingRequest{
 		MetadataContext: &envoyCorev3.Metadata{
@@ -446,7 +446,7 @@ func TestHandleRequestHeaders_MixedArrayAndCommaStringElements(t *testing.T) {
 		{Address: "10.0.0.3", Port: "8080"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	fullReq := &extProcPb.ProcessingRequest{
 		MetadataContext: &envoyCorev3.Metadata{
@@ -487,7 +487,7 @@ func TestHandleRequestHeaders_PortAwareFiltering(t *testing.T) {
 		{Address: "10.0.0.2", Port: "9090"},
 	}
 	ds := &mockDatastore{pods: pods}
-	server := NewStreamingServer(ds)
+	server := NewStreamingServer(ds, types.NamespacedName{})
 
 	tests := []struct {
 		name               string

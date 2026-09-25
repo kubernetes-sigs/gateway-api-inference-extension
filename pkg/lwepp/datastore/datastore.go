@@ -48,7 +48,6 @@ type Endpoint struct {
 type EndpointPool struct {
 	Selector    map[string]string
 	TargetPorts []int
-	Name        string
 	Namespace   string
 }
 
