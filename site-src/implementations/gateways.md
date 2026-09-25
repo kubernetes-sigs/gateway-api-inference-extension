@@ -44,8 +44,10 @@ Gateway API Inference Extension v1.5.0. See the [conformance report][ack-gie-rep
 It provides a fully compliant implementation of the Kubernetes Gateway API for cluster ingress traffic control. 
 For service mesh users, Istio also fully supports east-west (including [GAMMA](https://gateway-api.sigs.k8s.io/mesh/)) traffic management within the mesh.
 
-Gateway API Inference Extension support is being tracked by this [GitHub
-Issue](https://github.com/istio/istio/issues/55768).
+Istio supports the Gateway API Inference Extension for inference-aware
+routing. See the [Istio documentation](https://istio.io/latest/docs/tasks/traffic-management/ingress/gateway-api-inference-extension/)
+for installation and configuration instructions. Istio v1.28.0 or later is
+recommended to ensure compatibility with the InferencePool API.
 
 ## Agentgateway
 
