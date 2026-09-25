@@ -113,7 +113,7 @@ func (r *ExtProcServerRunner) AsRunnable(logger logr.Logger) manager.Runnable {
 			srv = grpc.NewServer()
 		}
 
-		extProcServer := handlers.NewStreamingServer(r.Datastore)
+		extProcServer := handlers.NewStreamingServer(r.Datastore, r.GKNN.NamespacedName)
 		extProcPb.RegisterExternalProcessorServer(srv, extProcServer)
 
 		if r.HealthChecking {

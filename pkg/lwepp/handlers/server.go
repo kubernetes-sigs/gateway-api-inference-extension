@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -41,9 +42,10 @@ type Datastore interface {
 	PodList(predicate func(*datastore.Endpoint) bool) []*datastore.Endpoint
 }
 
-func NewStreamingServer(datastore Datastore) *StreamingServer {
+func NewStreamingServer(datastore Datastore, poolName types.NamespacedName) *StreamingServer {
 	return &StreamingServer{
 		datastore: datastore,
+		poolName:  poolName,
 		picker:    &RoundRobinPicker{},
 	}
 }
@@ -51,6 +53,7 @@ func NewStreamingServer(datastore Datastore) *StreamingServer {
 // StreamingServer implements the Envoy external processing server.
 type StreamingServer struct {
 	datastore Datastore
+	poolName  types.NamespacedName
 	picker    EndpointPicker
 }
 
@@ -161,12 +164,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 												RawValue: []byte(reqCtx.TargetEndpoint),
 											},
 										},
-										{
-											Header: &configPb.HeaderValue{
-												Key:      "X-Echo-Set-Header",
-												RawValue: []byte(metadata.ConformanceTestResultHeader + ":" + reqCtx.TargetEndpoint),
-											},
-										},
 									},
 								},
 							},
@@ -232,12 +229,6 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 													RawValue: []byte(reqCtx.TargetEndpoint),
 												},
 											},
-											{
-												Header: &configPb.HeaderValue{
-													Key:      "X-Echo-Set-Header",
-													RawValue: []byte(metadata.ConformanceTestResultHeader + ":" + reqCtx.TargetEndpoint),
-												},
-											},
 										},
 									},
 								},
@@ -277,7 +268,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 		case *extProcPb.ProcessingRequest_ResponseHeaders:
 			logger.Info("Received response headers")
-			resp := s.handleResponseHeaders(ctx, req, v)
+			resp := s.handleResponseHeaders(ctx, reqCtx, req)
 			if err := srv.Send(resp); err != nil {
 				return status.Errorf(codes.Unknown, "failed to send response back to Envoy: %v", err)
 			}
