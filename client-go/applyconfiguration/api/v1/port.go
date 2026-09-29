@@ -30,6 +30,23 @@ type PortApplyConfiguration struct {
 	// Number defines the port number to access the selected model server Pods.
 	// The number must be in the range 1 to 65535.
 	Number *apiv1.PortNumber `json:"number,omitempty"`
+	// Role designates the function this port serves for the InferencePool.
+	//
+	// If unspecified, the role defaults to "Serving".
+	//
+	// Supported values include:
+	// * "Serving": the port used for inference traffic. This is the default. Only ports with
+	// this role are treated as distinctive endpoints addressable as a 'podIP:portNumber'
+	// combination; a pool with no "Serving" port exposes no inference endpoints.
+	// * "Metrics": the port model server metrics are scraped from. Consumers that scrape
+	// metrics should prefer a port with this role and fall back to the "Serving" port
+	// when none is present.
+	// * "Health": the port used for liveness/readiness probing. Consumers that perform health
+	// checks should prefer a port with this role and fall back to the "Serving" port when
+	// none is present.
+	//
+	// Multiple ports may share a role, and a single port entry has exactly one role.
+	Role *apiv1.PortRole `json:"role,omitempty"`
 }
 
 // PortApplyConfiguration constructs a declarative configuration of the Port type for use with
@@ -43,5 +60,13 @@ func Port() *PortApplyConfiguration {
 // If called multiple times, the Number field is set to the value of the last call.
 func (b *PortApplyConfiguration) WithNumber(value apiv1.PortNumber) *PortApplyConfiguration {
 	b.Number = &value
+	return b
+}
+
+// WithRole sets the Role field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Role field is set to the value of the last call.
+func (b *PortApplyConfiguration) WithRole(value apiv1.PortRole) *PortApplyConfiguration {
+	b.Role = &value
 	return b
 }
