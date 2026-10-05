@@ -24,7 +24,7 @@ require (
 	k8s.io/client-go v0.37.1
 	k8s.io/code-generator v0.37.1
 	k8s.io/utils v0.0.0-20260626114624-be93311217bd // indirect
-	sigs.k8s.io/controller-runtime v0.25.1
+	sigs.k8s.io/controller-runtime v0.25.2
 	// Update the CONTROLLER_TOOLS_VERSION in Makefile when bumping controller-tools.
 	sigs.k8s.io/controller-tools v0.22.0
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2
