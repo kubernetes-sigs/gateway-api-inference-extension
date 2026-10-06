@@ -142,6 +142,7 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endpoint
 		// 3) If the targetPorts changed, we need to resync to remove orphaned rank endpoints that no longer
 		//    exist in the new targetPorts configuration.
 		if err := ds.podResyncAll(ctx, reader); err != nil {
+			ds.pool = oldEndpointPool
 			return fmt.Errorf("failed to update pods according to the pool selector - %w", err)
 		}
 	}
