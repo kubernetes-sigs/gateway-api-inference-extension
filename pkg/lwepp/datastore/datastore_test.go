@@ -18,6 +18,7 @@ package datastore
 
 import (
 	"context"
+	"maps"
 	"net"
 	"reflect"
 	"strconv"
@@ -28,12 +29,15 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	v1 "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	testutil "sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/util/testing"
@@ -151,6 +155,99 @@ func TestPool(t *testing.T) {
 				if diff := cmp.Diff(tt.wantLabelsMatch, gotLabelsMatch); diff != "" {
 					t.Errorf("Unexpected labels match diff (+got/-want): %s", diff)
 				}
+			}
+		})
+	}
+}
+
+func TestPoolSetRetriesFailedResync(t *testing.T) {
+	pool := &EndpointPool{
+		Namespace:   "default",
+		Selector:    map[string]string{"app": "vllm"},
+		TargetPorts: []int{8001},
+	}
+	tests := []struct {
+		name        string
+		initialPool *EndpointPool
+	}{
+		{name: "initial sync"},
+		{
+			name: "selector update",
+			initialPool: &EndpointPool{
+				Namespace: "default", Selector: map[string]string{"app": "other"}, TargetPorts: []int{8001},
+			},
+		},
+		{
+			name: "target port update",
+			initialPool: &EndpointPool{
+				Namespace: "default", Selector: map[string]string{"app": "vllm"}, TargetPorts: []int{8000},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := t.Context()
+			readyPod := testutil.MakePod("pod1").Namespace("default").
+				Labels(map[string]string{"app": "vllm"}).ReadyCondition().ObjRef()
+			otherPod := testutil.MakePod("pod2").Namespace("default").
+				Labels(map[string]string{"app": "other"}).ReadyCondition().ObjRef()
+			scheme := runtime.NewScheme()
+			if err := clientgoscheme.AddToScheme(scheme); err != nil {
+				t.Fatal(err)
+			}
+			failList := false
+			reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(readyPod, otherPod).
+				WithInterceptorFuncs(interceptor.Funcs{
+					List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+						if failList {
+							failList = false
+							return apierrors.NewServiceUnavailable("temporary list failure")
+						}
+						return c.List(ctx, list, opts...)
+					},
+				}).Build()
+			ds := NewDatastore(ctx)
+			if err := ds.PoolSet(ctx, reader, tt.initialPool); err != nil {
+				t.Fatal(err)
+			}
+			beforePool, beforeErr := ds.PoolGet()
+			if beforePool != nil {
+				beforePool = &EndpointPool{
+					Namespace:   beforePool.Namespace,
+					Selector:    maps.Clone(beforePool.Selector),
+					TargetPorts: append([]int(nil), beforePool.TargetPorts...),
+				}
+			}
+			beforeSynced := ds.PoolHasSynced()
+			beforeEndpoints := ds.PodList(AllPodsPredicate)
+			for i, endpoint := range beforeEndpoints {
+				snapshot := *endpoint
+				snapshot.Labels = maps.Clone(endpoint.Labels)
+				beforeEndpoints[i] = &snapshot
+			}
+			failList = true
+			if err := ds.PoolSet(ctx, reader, pool); !apierrors.IsServiceUnavailable(err) {
+				t.Fatalf("expected temporary list failure, got %v", err)
+			}
+			afterPool, afterErr := ds.PoolGet()
+			if diff := cmp.Diff(beforePool, afterPool); diff != "" {
+				t.Errorf("failed resync changed pool (-before/+after): %s", diff)
+			}
+			if diff := cmp.Diff(beforeErr, afterErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("failed resync changed pool error (-before/+after): %s", diff)
+			}
+			if synced := ds.PoolHasSynced(); synced != beforeSynced {
+				t.Errorf("failed resync changed sync state: got %v, want %v", synced, beforeSynced)
+			}
+			if diff := cmp.Diff(beforeEndpoints, ds.PodList(AllPodsPredicate)); diff != "" {
+				t.Errorf("failed resync changed endpoints (-before/+after): %s", diff)
+			}
+			if err := ds.PoolSet(ctx, reader, pool); err != nil {
+				t.Fatalf("retry failed: %v", err)
+			}
+			endpoints := ds.PodList(AllPodsPredicate)
+			if len(endpoints) != 1 || endpoints[0].PodName != readyPod.Name || endpoints[0].Port != "8001" {
+				t.Fatalf("retry did not sync updated endpoints: %+v", endpoints)
 			}
 		})
 	}
