@@ -18,6 +18,7 @@ package datastore
 
 import (
 	"context"
+	"maps"
 	"net"
 	"reflect"
 	"strconv"
@@ -188,12 +189,14 @@ func TestPoolSetRetriesFailedResync(t *testing.T) {
 			ctx := t.Context()
 			readyPod := testutil.MakePod("pod1").Namespace("default").
 				Labels(map[string]string{"app": "vllm"}).ReadyCondition().ObjRef()
+			otherPod := testutil.MakePod("pod2").Namespace("default").
+				Labels(map[string]string{"app": "other"}).ReadyCondition().ObjRef()
 			scheme := runtime.NewScheme()
 			if err := clientgoscheme.AddToScheme(scheme); err != nil {
 				t.Fatal(err)
 			}
 			failList := false
-			reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(readyPod).
+			reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(readyPod, otherPod).
 				WithInterceptorFuncs(interceptor.Funcs{
 					List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
 						if failList {
@@ -207,9 +210,37 @@ func TestPoolSetRetriesFailedResync(t *testing.T) {
 			if err := ds.PoolSet(ctx, reader, tt.initialPool); err != nil {
 				t.Fatal(err)
 			}
+			beforePool, beforeErr := ds.PoolGet()
+			if beforePool != nil {
+				beforePool = &EndpointPool{
+					Namespace:   beforePool.Namespace,
+					Selector:    maps.Clone(beforePool.Selector),
+					TargetPorts: append([]int(nil), beforePool.TargetPorts...),
+				}
+			}
+			beforeSynced := ds.PoolHasSynced()
+			beforeEndpoints := ds.PodList(AllPodsPredicate)
+			for i, endpoint := range beforeEndpoints {
+				snapshot := *endpoint
+				snapshot.Labels = maps.Clone(endpoint.Labels)
+				beforeEndpoints[i] = &snapshot
+			}
 			failList = true
 			if err := ds.PoolSet(ctx, reader, pool); !apierrors.IsServiceUnavailable(err) {
 				t.Fatalf("expected temporary list failure, got %v", err)
+			}
+			afterPool, afterErr := ds.PoolGet()
+			if diff := cmp.Diff(beforePool, afterPool); diff != "" {
+				t.Errorf("failed resync changed pool (-before/+after): %s", diff)
+			}
+			if diff := cmp.Diff(beforeErr, afterErr, cmpopts.EquateErrors()); diff != "" {
+				t.Errorf("failed resync changed pool error (-before/+after): %s", diff)
+			}
+			if synced := ds.PoolHasSynced(); synced != beforeSynced {
+				t.Errorf("failed resync changed sync state: got %v, want %v", synced, beforeSynced)
+			}
+			if diff := cmp.Diff(beforeEndpoints, ds.PodList(AllPodsPredicate)); diff != "" {
+				t.Errorf("failed resync changed endpoints (-before/+after): %s", diff)
 			}
 			if err := ds.PoolSet(ctx, reader, pool); err != nil {
 				t.Fatalf("retry failed: %v", err)

@@ -126,7 +126,6 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endpoint
 	defer ds.mu.Unlock()
 
 	oldEndpointPool := ds.pool
-	ds.pool = endpointPool
 
 	selectorChanged := oldEndpointPool == nil || !labels.Equals(oldEndpointPool.Selector, endpointPool.Selector)
 	targetPortsChanged := oldEndpointPool != nil && !slices.Equal(oldEndpointPool.TargetPorts, endpointPool.TargetPorts)
@@ -141,11 +140,11 @@ func (ds *datastore) PoolSet(ctx context.Context, reader client.Reader, endpoint
 		//    the ones that may have existed already to the store.
 		// 3) If the targetPorts changed, we need to resync to remove orphaned rank endpoints that no longer
 		//    exist in the new targetPorts configuration.
-		if err := ds.podResyncAll(ctx, reader); err != nil {
-			ds.pool = oldEndpointPool
+		if err := ds.podResyncAll(ctx, reader, endpointPool); err != nil {
 			return fmt.Errorf("failed to update pods according to the pool selector - %w", err)
 		}
 	}
+	ds.pool = endpointPool
 
 	return nil
 }
@@ -265,12 +264,12 @@ func (ds *datastore) PodDelete(podName string) {
 	})
 }
 
-func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) error {
+func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader, pool *EndpointPool) error {
 	logger := log.FromContext(ctx)
 	podList := &corev1.PodList{}
 	if err := reader.List(ctx, podList, &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(ds.pool.Selector),
-		Namespace:     ds.pool.Namespace,
+		LabelSelector: labels.SelectorFromSet(pool.Selector),
+		Namespace:     pool.Namespace,
 	}); err != nil {
 		return fmt.Errorf("failed to list pods - %w", err)
 	}
@@ -281,10 +280,10 @@ func (ds *datastore) podResyncAll(ctx context.Context, reader client.Reader) err
 			continue
 		}
 		namespacedName := types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}
-		for idx := range ds.pool.TargetPorts {
+		for idx := range pool.TargetPorts {
 			activeEndpoints.Insert(createEndpointNamespacedName(&pod, idx))
 		}
-		if !ds.podUpdateOrAddIfNotExist(ctx, &pod, ds.pool) {
+		if !ds.podUpdateOrAddIfNotExist(ctx, &pod, pool) {
 			logger.V(logutil.DEFAULT).Info("Pod added", "name", namespacedName)
 		} else {
 			logger.V(logutil.DEFAULT).Info("Pod already exists", "name", namespacedName)
