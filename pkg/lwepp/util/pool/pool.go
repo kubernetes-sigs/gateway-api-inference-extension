@@ -27,8 +27,12 @@ func InferencePoolToEndpointPool(inferencePool *v1.InferencePool) *datastore.End
 	}
 	targetPorts := make([]int, 0, len(inferencePool.Spec.TargetPorts))
 	for _, p := range inferencePool.Spec.TargetPorts {
+		// Only "Serving" ports (the default when Role is unset) are traffic endpoints. Ports
+		// dedicated to the metrics or health role are not addressable as inference endpoints.
+		if p.Role != v1.PortRoleServing && p.Role != "" {
+			continue
+		}
 		targetPorts = append(targetPorts, int(p.Number))
-
 	}
 	selector := make(map[string]string, len(inferencePool.Spec.Selector.MatchLabels))
 	for k, v := range inferencePool.Spec.Selector.MatchLabels {
