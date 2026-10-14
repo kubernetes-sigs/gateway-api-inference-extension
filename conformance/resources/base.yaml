@@ -277,8 +277,8 @@ spec:
           grpc:
             port: 9003
             service: inference-extension
-          initialDelaySeconds: 5
-          periodSeconds: 10
+          initialDelaySeconds: 1
+          periodSeconds: 2
 ---
 # --- Secondary InferencePool Definition ---
 apiVersion: inference.networking.k8s.io/v1
@@ -364,8 +364,8 @@ spec:
           grpc:
             port: 9003
             service: inference-extension
-          initialDelaySeconds: 5
-          periodSeconds: 10
+          initialDelaySeconds: 1
+          periodSeconds: 2
 ---
 # --- Explicit HTTP appProtocol InferencePool Definition ---
 apiVersion: inference.networking.k8s.io/v1
@@ -451,8 +451,8 @@ spec:
           grpc:
             port: 9003
             service: inference-extension
-          initialDelaySeconds: 5
-          periodSeconds: 10
+          initialDelaySeconds: 1
+          periodSeconds: 2
 ---
 # --- H2C InferencePool Definition ---
 apiVersion: inference.networking.k8s.io/v1
@@ -538,8 +538,8 @@ spec:
           grpc:
             port: 9003
             service: inference-extension
-          initialDelaySeconds: 5
-          periodSeconds: 10
+          initialDelaySeconds: 1
+          periodSeconds: 2
 ---
 # -- Data Parallelism (DP) backend deployment: 3 pods, each listening on three ports to simulate ranks ---
 apiVersion: apps/v1
@@ -736,8 +736,8 @@ spec:
           grpc:
             port: 9003
             service: inference-extension
-          initialDelaySeconds: 5
-          periodSeconds: 10
+          initialDelaySeconds: 1
+          periodSeconds: 2
 ---
 # --- Required Role and RoleBinding for Conformance Test for EPP ---
 apiVersion: rbac.authorization.k8s.io/v1
