@@ -72,6 +72,9 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 }
 
 func (opts *Options) Complete() error {
+	if opts.PoolNamespace == "" {
+		opts.PoolNamespace = DefaultPoolNamespace
+	}
 	opts.EndpointTargetPorts = removeDuplicatePorts(opts.EndpointTargetPorts)
 	return nil
 }
