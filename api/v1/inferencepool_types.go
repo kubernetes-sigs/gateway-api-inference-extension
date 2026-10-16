@@ -107,6 +107,59 @@ type Port struct {
 	//
 	// +required
 	Number PortNumber `json:"number,omitempty"`
+
+	// Role designates the function this port serves for the InferencePool.
+	//
+	// If unspecified, the role defaults to "Serving".
+	//
+	// Supported values include:
+	// * "Serving": the port used for inference traffic. This is the default. Only ports with
+	//   this role are treated as distinctive endpoints addressable as a 'podIP:portNumber'
+	//   combination; a pool with no "Serving" port exposes no inference endpoints.
+	// * "Metrics": the port model server metrics are scraped from. Consumers that scrape
+	//   metrics should prefer a port with this role and fall back to the "Serving" port
+	//   when none is present.
+	// * "Health": the port used for liveness/readiness probing. Consumers that perform health
+	//   checks should prefer a port with this role and fall back to the "Serving" port when
+	//   none is present.
+	//
+	// Multiple ports may share a role, and a single port entry has exactly one role.
+	//
+	// +kubebuilder:validation:Enum=Serving;Metrics;Health
+	// +kubebuilder:default=Serving
+	// +optional
+	Role PortRole `json:"role,omitempty"`
+}
+
+// PortRole describes the function a Port serves within an InferencePool.
+type PortRole string
+
+const (
+	// PortRoleServing designates a port used for inference traffic. This is the default role
+	// for a Port when Role is unspecified.
+	PortRoleServing PortRole = "Serving"
+
+	// PortRoleMetrics designates a port used for scraping model server metrics.
+	PortRoleMetrics PortRole = "Metrics"
+
+	// PortRoleHealth designates a port used for liveness/readiness health checking.
+	PortRoleHealth PortRole = "Health"
+)
+
+// PortNumberForRole returns the port number of the first targetPort with the given role. If no
+// targetPort has that role, it falls back to the first targetPort with the "Serving" role, and
+// returns 0 when the spec has no "Serving" port at all.
+func (s *InferencePoolSpec) PortNumberForRole(role PortRole) PortNumber {
+	var servingPort PortNumber
+	for _, p := range s.TargetPorts {
+		if p.Role == role {
+			return p.Number
+		}
+		if servingPort == 0 && (p.Role == PortRoleServing || p.Role == "") {
+			servingPort = p.Number
+		}
+	}
+	return servingPort
 }
 
 // AppProtocol describes the application protocol for a port.
