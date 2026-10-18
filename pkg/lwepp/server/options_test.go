@@ -97,11 +97,6 @@ func TestPoolNamespace(t *testing.T) {
 			expectedNamespace: DefaultPoolNamespace,
 		},
 		{
-			name:              "Empty flag value falls back to the default namespace",
-			args:              []string{"--pool-name", "pool", "--pool-namespace", ""},
-			expectedNamespace: DefaultPoolNamespace,
-		},
-		{
 			name:              "Explicit namespace is kept",
 			args:              []string{"--pool-name", "pool", "--pool-namespace", "team-a"},
 			expectedNamespace: "team-a",

@@ -24,7 +24,7 @@ import (
 const (
 	DefaultGrpcPort       = 9002
 	DefaultGrpcHealthPort = 9003
-	DefaultPoolNamespace  = "default" // default when pool namespace is empty (CLI flag default is empty)
+	DefaultPoolNamespace  = "default" // default value of the --pool-namespace flag
 )
 
 // Options contains configuration values necessary to create and run the lwepp.
@@ -46,6 +46,7 @@ func NewOptions() *Options {
 		GRPCPort:            DefaultGrpcPort,
 		GRPCHealthPort:      DefaultGrpcHealthPort,
 		PoolGroup:           "inference.networking.k8s.io",
+		PoolNamespace:       DefaultPoolNamespace,
 		EndpointTargetPorts: []int{},
 		MetricsPort:         9090,
 		SecureServing:       true,
@@ -72,9 +73,6 @@ func (opts *Options) AddFlags(fs *pflag.FlagSet) {
 }
 
 func (opts *Options) Complete() error {
-	if opts.PoolNamespace == "" {
-		opts.PoolNamespace = DefaultPoolNamespace
-	}
 	opts.EndpointTargetPorts = removeDuplicatePorts(opts.EndpointTargetPorts)
 	return nil
 }
