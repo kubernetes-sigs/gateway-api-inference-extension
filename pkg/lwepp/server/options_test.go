@@ -84,3 +84,43 @@ func TestEndpointTargetPorts(t *testing.T) {
 		})
 	}
 }
+
+func TestPoolNamespace(t *testing.T) {
+	tests := []struct {
+		name              string
+		args              []string
+		expectedNamespace string
+	}{
+		{
+			name:              "Flag omitted falls back to the default namespace",
+			args:              []string{"--pool-name", "pool"},
+			expectedNamespace: DefaultPoolNamespace,
+		},
+		{
+			name:              "Explicit namespace is kept",
+			args:              []string{"--pool-name", "pool", "--pool-namespace", "team-a"},
+			expectedNamespace: "team-a",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := pflag.NewFlagSet(tt.name, pflag.ContinueOnError)
+
+			opts := NewOptions()
+			opts.AddFlags(fs)
+
+			if err := fs.Parse(tt.args); err != nil {
+				t.Fatalf("Failed to parse flags: %v", err)
+			}
+
+			if err := opts.Complete(); err != nil {
+				t.Fatalf("Complete failed unexpectedly with error: %v", err)
+			}
+
+			if diff := cmp.Diff(tt.expectedNamespace, opts.PoolNamespace); diff != "" {
+				t.Errorf("Resulting pool namespace mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
