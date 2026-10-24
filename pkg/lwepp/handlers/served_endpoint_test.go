@@ -37,6 +37,7 @@ import (
 )
 
 func TestProcessServedEndpointObservation(t *testing.T) {
+	server := NewStreamingServer(&mockDatastore{pods: []*datastore.Endpoint{{Address: "10.0.0.1", Port: "3000"}}})
 	for _, tc := range []struct{ name, id, served, expected string }{
 		{"actual endpoint differs from selected", "first", "10.0.0.2:3000", "10.0.0.2:3000"},
 		{"separate request", "second", "10.0.0.3:3000", "10.0.0.3:3000"},
@@ -57,7 +58,6 @@ func TestProcessServedEndpointObservation(t *testing.T) {
 				{Request: &ext.ProcessingRequest_RequestHeaders{RequestHeaders: &ext.HttpHeaders{EndOfStream: true, Headers: &core.HeaderMap{Headers: []*core.HeaderValue{{Key: metadata.ConformanceRequestIDHeader, Value: tc.id}}}}}},
 				response,
 			}}
-			server := NewStreamingServer(&mockDatastore{pods: []*datastore.Endpoint{{Address: "10.0.0.1", Port: "3000"}}})
 			require.NoError(t, server.Process(stream))
 			found := false
 			for _, line := range strings.Split(logs.String(), "\n") {
