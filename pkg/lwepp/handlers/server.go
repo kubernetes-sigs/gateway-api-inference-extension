@@ -27,7 +27,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/common/envoy"
@@ -105,7 +104,7 @@ const maxRequestBodySize = 10 * 1024 * 1024 // 10MB
 
 func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	ctx := srv.Context()
-	logger := ctrl.Log.WithName("ext-proc")
+	logger := log.FromContext(ctx).WithName("ext-proc")
 	ctx = log.IntoContext(ctx, logger)
 	logger.Info("Processing new stream")
 
@@ -138,6 +137,11 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			if err != nil {
 				logger.Error(err, "Failed to handle request headers")
 				return status.Errorf(codes.Internal, "internal error: %v", err)
+			}
+
+			// Keep correlation local to this ext_proc stream, including asynchronous responses.
+			if ids := reqCtx.Headers[metadata.ConformanceRequestIDHeader]; len(ids) == 1 && len(ids[0]) <= 128 {
+				ctx = log.IntoContext(ctx, logger.WithValues("conformanceRequestID", ids[0]))
 			}
 
 			var resp *extProcPb.ProcessingResponse

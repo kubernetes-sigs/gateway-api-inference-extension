@@ -45,6 +45,8 @@ func (s *StreamingServer) handleResponseHeaders(ctx context.Context, fullReq *ex
 		servedEndpoint = served
 	}
 
+	logger.Info(metadata.ServedEndpointObservation, "servedEndpoint", servedEndpoint)
+
 	logger.Info("Setting conformance test result header", "header", metadata.ConformanceTestResultHeader, "value", servedEndpoint)
 
 	headers := []*configPb.HeaderValueOption{
