@@ -17,6 +17,10 @@ limitations under the License.
 package metadata
 
 const (
+	// ConformanceRequestIDHeader correlates asynchronous served-endpoint observations.
+	ConformanceRequestIDHeader = "x-conformance-request-id"
+	// ServedEndpointObservation is the structured log event consumed by conformance tests.
+	ServedEndpointObservation = "Conformance served endpoint observation"
 	// SubsetFilterNamespace is the key for the outer namespace struct in the metadata field of the extproc request that is used to wrap the subset filter.
 	SubsetFilterNamespace = "envoy.lb.subset_hint"
 	// SubsetFilterKey is the metadata key used by Envoy to specify an array candidate pods for serving the request.

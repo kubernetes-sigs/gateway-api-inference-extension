@@ -17,9 +17,13 @@ limitations under the License.
 package tests
 
 import (
+	"context"
+	"net"
 	"net/http"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/types"
 	gwhttp "sigs.k8s.io/gateway-api/conformance/utils/http"
@@ -30,6 +34,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/features"
 	"sigs.k8s.io/gateway-api-inference-extension/conformance/utils/headers"
 	k8sutils "sigs.k8s.io/gateway-api-inference-extension/conformance/utils/kubernetes"
+	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/metadata"
 )
 
 func init() {
@@ -78,6 +83,8 @@ var GatewayDestinationEndpointServed = suite.ConformanceTest{
         }`
 		t.Run("Request is served by the selected backend pod", func(t *testing.T) {
 			for i := 0; i < len(pods); i++ {
+				requestID := uuid.NewString()
+				since := time.Now().Add(-time.Second)
 				gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 					t,
 					s.RoundTripper,
@@ -91,18 +98,20 @@ var GatewayDestinationEndpointServed = suite.ConformanceTest{
 							Body:   requestBody,
 							Headers: map[string]string{
 								headers.HeaderTestEppEndPointSelectionKey: podIPs[i],
+								metadata.ConformanceRequestIDHeader:       requestID,
 							},
 						},
 						Response: gwhttp.Response{
 							StatusCodes: []int{http.StatusOK},
-							Headers: map[string]string{
-								headers.ConformanceTestResultHeader: podIPs[i] + ":3000", // The echo server's port is 3000.
-							},
 						},
 						Backend:   podNames[i],
 						Namespace: resources.AppBackendNamespace,
 					},
 				)
+				ctx, cancel := context.WithTimeout(context.Background(), s.TimeoutConfig.RequestTimeout)
+				err := k8sutils.WaitForServedEndpoint(ctx, s.Clientset, resources.AppBackendNamespace, "app=primary-app-backend-epp", requestID, net.JoinHostPort(podIPs[i], "3000"), since, time.Second)
+				cancel()
+				require.NoError(t, err, "Gateway must report the served endpoint to EPP independently of the client response")
 			}
 		})
 	},
