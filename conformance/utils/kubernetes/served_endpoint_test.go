@@ -50,6 +50,7 @@ func TestServedEndpointObserved(t *testing.T) {
 		{"missing key", observation("current", "fail: missing destination endpoint served metadata"), false, true},
 		{"echo header is not evidence", `{"msg":"Setting conformance test result header","conformanceRequestID":"current","servedEndpoint":"10.0.0.1:3000"}`, false, false},
 		{"malformed unrelated line", "not-json\n" + observation("current", "10.0.0.1:3000"), true, false},
+		{"stabilizes after wrong endpoint", observation("current", "10.0.0.2:3000") + observation("current", "10.0.0.1:3000"), true, false},
 		{"conflicting retries", observation("current", "10.0.0.1:3000") + observation("current", "10.0.0.2:3000"), false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -129,4 +130,46 @@ func TestClientResponseDoesNotRequireServedEndpointHeader(t *testing.T) {
 	require.NoError(t, gwhttp.CompareRoundTrip(t, request, backend, captured, expected))
 	expected.Response.Headers = map[string]string{metadata.ConformanceTestResultHeader: "10.0.0.1:3000"}
 	require.ErrorContains(t, gwhttp.CompareRoundTrip(t, request, backend, captured, expected), metadata.ConformanceTestResultHeader)
+}
+
+// Use an HTTP API fixture so both typed list errors and the pod/log REST
+// subresource exercise the same authentication and retry behavior as the suite.
+func TestWaitForServedEndpointAPIErrors(t *testing.T) {
+	for _, stage := range []string{"list", "log"} {
+		for _, code := range []int{401, 403, 404, 500} {
+			t.Run(fmt.Sprintf("%s/%d", stage, code), func(t *testing.T) {
+				var failures atomic.Int32
+				since := time.Now().Add(-5 * time.Minute).Truncate(time.Second)
+				api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					isLog := r.URL.Path == "/api/v1/namespaces/test/pods/epp-1/log"
+					if (stage == "log") == isLog && failures.Add(1) == 1 {
+						reason := map[int]string{401: "Unauthorized", 403: "Forbidden", 404: "NotFound", 500: "InternalError"}[code]
+						w.WriteHeader(code)
+						fmt.Fprintf(w, `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":%q,"code":%d}`, reason, code)
+						return
+					}
+					if !isLog {
+						fmt.Fprint(w, `{"apiVersion":"v1","kind":"PodList","items":[{"metadata":{"name":"epp-1"}}]}`)
+						return
+					}
+					require.Equal(t, since.UTC().Format(time.RFC3339), r.URL.Query().Get("sinceTime"))
+					fmt.Fprint(w, observation("other-run", "wrong")+observation("current", "10.0.0.1:3000"))
+				}))
+				defer api.Close()
+				client, err := kubernetes.NewForConfig(&rest.Config{Host: api.URL})
+				require.NoError(t, err)
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+				defer cancel()
+				err = WaitForServedEndpoint(ctx, client, "test", "app=epp", "current", "10.0.0.1:3000", since, time.Millisecond)
+				if code == 401 || code == 403 {
+					require.Error(t, err)
+					require.EqualValues(t, 1, failures.Load())
+				} else {
+					require.NoError(t, err)
+					require.GreaterOrEqual(t, failures.Load(), int32(2))
+				}
+			})
+		}
+	}
 }

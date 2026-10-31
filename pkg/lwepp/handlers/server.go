@@ -141,7 +141,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 			// Keep correlation local to this ext_proc stream, including asynchronous responses.
 			if ids := reqCtx.Headers[metadata.ConformanceRequestIDHeader]; len(ids) == 1 && len(ids[0]) <= 128 {
-				ctx = log.IntoContext(ctx, logger.WithValues("conformanceRequestID", ids[0]))
+				ctx = log.IntoContext(ctx, logger.WithValues(metadata.ConformanceRequestIDLogKey, ids[0]))
 			}
 
 			var resp *extProcPb.ProcessingResponse

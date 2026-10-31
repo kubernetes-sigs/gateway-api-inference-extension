@@ -65,8 +65,8 @@ func TestProcessServedEndpointObservation(t *testing.T) {
 				if json.Unmarshal([]byte(line), &event) != nil || event["msg"] != metadata.ServedEndpointObservation {
 					continue
 				}
-				require.Equal(t, tc.id, event["conformanceRequestID"])
-				require.Equal(t, tc.expected, event["servedEndpoint"])
+				require.Equal(t, tc.id, event[metadata.ConformanceRequestIDLogKey])
+				require.Equal(t, tc.expected, event[metadata.ServedEndpointLogKey])
 				found = true
 			}
 			require.True(t, found, "response metadata must be observable without a client response header")

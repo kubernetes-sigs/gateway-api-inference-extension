@@ -84,7 +84,7 @@ var GatewayDestinationEndpointServed = suite.ConformanceTest{
 		t.Run("Request is served by the selected backend pod", func(t *testing.T) {
 			for i := 0; i < len(pods); i++ {
 				requestID := uuid.NewString()
-				since := time.Now().Add(-time.Second)
+				since := time.Now().Add(-5 * time.Minute)
 				gwhttp.MakeRequestAndExpectEventuallyConsistentResponse(
 					t,
 					s.RoundTripper,

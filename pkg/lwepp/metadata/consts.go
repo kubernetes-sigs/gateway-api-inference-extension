@@ -21,6 +21,10 @@ const (
 	ConformanceRequestIDHeader = "x-conformance-request-id"
 	// ServedEndpointObservation is the structured log event consumed by conformance tests.
 	ServedEndpointObservation = "Conformance served endpoint observation"
+	// ConformanceRequestIDLogKey is the request correlation field shared by log writers and readers.
+	ConformanceRequestIDLogKey = "conformanceRequestID"
+	// ServedEndpointLogKey is the endpoint field shared by log writers and readers.
+	ServedEndpointLogKey = "servedEndpoint"
 	// SubsetFilterNamespace is the key for the outer namespace struct in the metadata field of the extproc request that is used to wrap the subset filter.
 	SubsetFilterNamespace = "envoy.lb.subset_hint"
 	// SubsetFilterKey is the metadata key used by Envoy to specify an array candidate pods for serving the request.
