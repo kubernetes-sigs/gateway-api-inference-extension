@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/metadata"
 )
 
-func (s *StreamingServer) handleResponseHeaders(ctx context.Context, fullReq *extProcPb.ProcessingRequest, respHeaders *extProcPb.ProcessingRequest_ResponseHeaders) *extProcPb.ProcessingResponse {
+func (s *StreamingServer) handleResponseHeaders(ctx context.Context, reqCtx *RequestContext, fullReq *extProcPb.ProcessingRequest) *extProcPb.ProcessingResponse {
 	logger := log.FromContext(ctx)
 	logger.Info("Handling response headers")
 
@@ -61,21 +61,27 @@ func (s *StreamingServer) handleResponseHeaders(ctx context.Context, fullReq *ex
 				RawValue: []byte("true"),
 			},
 		},
+		{
+			Header: &configPb.HeaderValue{
+				Key:      metadata.ConformanceTestPoolHeader,
+				RawValue: []byte(s.poolName.String()),
+			},
+		},
 	}
 
-	// Include any non-system-owned headers from the original response.
-	if respHeaders != nil && respHeaders.ResponseHeaders != nil && respHeaders.ResponseHeaders.Headers != nil {
-		for _, header := range respHeaders.ResponseHeaders.Headers.Headers {
-			key := header.Key
-			headers = append(headers, &configPb.HeaderValueOption{
-				Header: &configPb.HeaderValue{
-					Key:      key,
-					RawValue: []byte(envoy.GetHeaderValue(header)),
-				},
-			})
-		}
+	// Report the selection separately from the gateway's served endpoint so tests
+	// can detect when the gateway did not route to the selected endpoint.
+	if reqCtx != nil && reqCtx.TargetEndpoint != "" {
+		headers = append(headers, &configPb.HeaderValueOption{
+			Header: &configPb.HeaderValue{
+				Key:      metadata.ConformanceTestSelectedHeader,
+				RawValue: []byte(reqCtx.TargetEndpoint),
+			},
+		})
 	}
 
+	// Envoy applies these mutations to the existing response headers. Copying the
+	// backend's headers into SetHeaders could overwrite the reports above.
 	resp := &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_ResponseHeaders{
 			ResponseHeaders: &extProcPb.HeadersResponse{

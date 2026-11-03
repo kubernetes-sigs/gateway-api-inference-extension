@@ -30,6 +30,11 @@ const (
 	DestinationEndpointServedKey = "x-gateway-destination-endpoint-served"
 	// ConformanceTestResultHeader is the header used by the conformance test to specify the endpoint that served the request.
 	ConformanceTestResultHeader = "x-conformance-test-served-endpoint"
+	// ConformanceTestSelectedHeader reports the selected endpoint (IP:port) to the test client.
+	// It is omitted when no endpoint was selected.
+	ConformanceTestSelectedHeader = "x-conformance-test-selected-endpoint"
+	// ConformanceTestPoolHeader identifies the picker's configured InferencePool as namespace/name.
+	ConformanceTestPoolHeader = "x-conformance-test-epp-pool"
 	// FlowFairnessIDKey is the header key used to pass the fairness ID to be used in Flow Control.
 	FlowFairnessIDKey = "x-gateway-inference-fairness-id"
 	// ObjectiveKey is the header key used to specify the objective of an incoming request.
