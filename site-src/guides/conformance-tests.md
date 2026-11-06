@@ -11,6 +11,31 @@ Install an [existing implementation](https://gateway-api-inference-extension.sig
 
 Note: This repository provides a **Lightweight Endpoint Picker (lwepp)** specifically designed for conformance testing. Since the EPP takes the `InferencePool` name and namespace as command-line arguments, each conformance test automatically spins up a corresponding `lwepp` deployment for each `InferencePool` it defines. To facilitate deterministic route verification, the `lwepp` natively supports routing requests to a specific target pod via the `test-epp-endpoint-selection` header, which the conformance tests use to steer and validate routing behavior. 
 
+### EPP log access
+
+In addition to permissions to manage the conformance resources, the identity
+running the suite needs `list` on `pods` and `get` on `pods/log` in the
+application namespace (`inference-conformance-app-backend`). The
+`GatewayDestinationEndpointServed` test reads the `epp` container's structured
+logs to observe asynchronous response metadata independently of client headers.
+For example, include these rules in a Role in that namespace and bind it to the
+identity running the tests:
+
+```yaml
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+```
+
+The log query starts five minutes before the request to tolerate clock skew
+between the runner and cluster nodes. A unique request ID excludes other test
+runs. Authentication and authorization failures stop immediately; other API
+errors are retried until the request timeout.
+
 ## Running Conformance Tests
 
 1.  **Clone the Repository**:

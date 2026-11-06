@@ -21,4 +21,19 @@ Conformance tests need to steer individual requests to a specific backend pod in
 
 ### Served Endpoint Reporting
 
-After a request is completed, conformance tests verify that the request was actually served by the pod the EPP selected. To support this, the LWEPP reads the `x-gateway-destination-endpoint-served` value from Envoy's response metadata (populated by a conforming gateway after routing to the backend) and writes it to the `x-conformance-test-served-endpoint` response header. The conformance test client reads this header to confirm correct routing.
+The `GatewayDestinationEndpointServed` test sends a unique `x-conformance-request-id`
+header. LWEPP logs the served endpoint from response metadata together with that ID
+as a JSON `Conformance served endpoint observation` event. After validating the
+client response and backend, the test polls EPP pod logs with a bounded timeout.
+This permits the gateway to send the client response before EPP processes response
+metadata; no response-header mutation is required for this test to pass.
+
+The test runner needs access to list EPP pods and read their `pods/log` subresource.
+The conformance manifests already configure LWEPP with the JSON log encoder.
+Missing observations time out, while missing or incorrect metadata in a matching
+observation fails the test. Unique request IDs prevent old or unrelated records
+from satisfying it. Logs use normal container log retention, with no in-memory
+observation store to clean up.
+
+LWEPP retains `x-conformance-test-served-endpoint` response headers for existing
+users and other tests; this test no longer uses them as its evidence.
