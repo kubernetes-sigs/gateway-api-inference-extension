@@ -24,6 +24,7 @@ import (
 
 	configPb "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -103,6 +104,26 @@ func (p *RoundRobinPicker) Pick(ctx context.Context, req *PickRequest, endpoints
 
 const maxRequestBodySize = 10 * 1024 * 1024 // 10MB
 
+// sendUnavailable answers the request with an ImmediateResponse carrying HTTP 503, as the
+// endpoint picker protocol requires when there is no ready endpoint or none of the endpoints
+// in the subset hint is eligible. Failing the stream instead lets a data plane configured to
+// fail open route the request to an endpoint outside the subset.
+func sendUnavailable(srv extProcPb.ExternalProcessor_ProcessServer, err error) error {
+	log.FromContext(srv.Context()).Info("No endpoint available, responding with 503", "reason", status.Convert(err).Message())
+	resp := &extProcPb.ProcessingResponse{
+		Response: &extProcPb.ProcessingResponse_ImmediateResponse{
+			ImmediateResponse: &extProcPb.ImmediateResponse{
+				Status: &envoyTypePb.HttpStatus{Code: envoyTypePb.StatusCode_ServiceUnavailable},
+				Body:   []byte(status.Convert(err).Message()),
+			},
+		},
+	}
+	if sendErr := srv.Send(resp); sendErr != nil {
+		return status.Errorf(codes.Unknown, "failed to send immediate response back to Envoy: %v", sendErr)
+	}
+	return nil
+}
+
 func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer) error {
 	ctx := srv.Context()
 	logger := ctrl.Log.WithName("ext-proc")
@@ -135,6 +156,9 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 		case *extProcPb.ProcessingRequest_RequestHeaders:
 			logger.Info("Received request headers")
 			err = s.handleRequestHeaders(ctx, reqCtx, req, v)
+			if status.Code(err) == codes.Unavailable {
+				return sendUnavailable(srv, err)
+			}
 			if err != nil {
 				logger.Error(err, "Failed to handle request headers")
 				return status.Errorf(codes.Internal, "internal error: %v", err)
@@ -143,6 +167,9 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			var resp *extProcPb.ProcessingResponse
 			if v.RequestHeaders.EndOfStream {
 				err = s.pickEndpoint(ctx, reqCtx, nil)
+				if status.Code(err) == codes.Unavailable {
+					return sendUnavailable(srv, err)
+				}
 				if err != nil {
 					logger.Error(err, "Failed to pick endpoint")
 					return status.Errorf(codes.Internal, "internal error: %v", err)
@@ -212,6 +239,9 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 
 			if v.RequestBody.EndOfStream {
 				err = s.pickEndpoint(ctx, reqCtx, body)
+				if status.Code(err) == codes.Unavailable {
+					return sendUnavailable(srv, err)
+				}
 				if err != nil {
 					logger.Error(err, "Failed to pick endpoint")
 					return status.Errorf(codes.Internal, "internal error: %v", err)
