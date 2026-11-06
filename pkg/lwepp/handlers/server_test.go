@@ -23,8 +23,11 @@ import (
 
 	envoyCorev3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	extProcPb "github.com/envoyproxy/go-control-plane/envoy/service/ext_proc/v3"
+	envoyTypePb "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/datastore"
 	"sigs.k8s.io/gateway-api-inference-extension/pkg/lwepp/metadata"
@@ -221,5 +224,87 @@ func TestProcess_DeferredHeaderMutationOnChunkedStreamingBody(t *testing.T) {
 		assert.Equal(t, append(append([]byte{}, firstChunk...), lastChunk...), streamed.GetBody(),
 			"both chunks must be forwarded, in arrival order")
 		assert.True(t, streamed.GetEndOfStream(), "the flushed body response ends the stream")
+	}
+}
+
+// TestProcess_NoEligibleEndpointRespondsWith503 covers the cases where the endpoint picker
+// protocol requires an ImmediateResponse with HTTP 503: no ready endpoint in the pool, or no
+// eligible endpoint in the subset hint. The stream must end cleanly after that response
+// instead of failing, since a failed stream lets a fail-open data plane pick any endpoint.
+func TestProcess_NoEligibleEndpointRespondsWith503(t *testing.T) {
+	subsetMetadata := func(endpoints ...string) *envoyCorev3.Metadata {
+		values := make([]*structpb.Value, 0, len(endpoints))
+		for _, ep := range endpoints {
+			values = append(values, structpb.NewStringValue(ep))
+		}
+		return &envoyCorev3.Metadata{
+			FilterMetadata: map[string]*structpb.Struct{
+				metadata.SubsetFilterNamespace: {
+					Fields: map[string]*structpb.Value{
+						metadata.SubsetFilterKey: structpb.NewListValue(&structpb.ListValue{Values: values}),
+					},
+				},
+			},
+		}
+	}
+	headers := func(md *envoyCorev3.Metadata, endOfStream bool) *extProcPb.ProcessingRequest {
+		return &extProcPb.ProcessingRequest{
+			MetadataContext: md,
+			Request: &extProcPb.ProcessingRequest_RequestHeaders{
+				RequestHeaders: &extProcPb.HttpHeaders{
+					Headers:     &envoyCorev3.HeaderMap{},
+					EndOfStream: endOfStream,
+				},
+			},
+		}
+	}
+	body := &extProcPb.ProcessingRequest{
+		Request: &extProcPb.ProcessingRequest_RequestBody{
+			RequestBody: &extProcPb.HttpBody{
+				Body:        []byte(`{"prompt": "hello"}`),
+				EndOfStream: true,
+			},
+		},
+	}
+	pods := []*datastore.Endpoint{{Address: "10.0.0.1", Port: "8080"}}
+
+	tests := []struct {
+		name     string
+		pods     []*datastore.Endpoint
+		requests []*extProcPb.ProcessingRequest
+	}{
+		{
+			name:     "no ready endpoints",
+			pods:     nil,
+			requests: []*extProcPb.ProcessingRequest{headers(nil, true)},
+		},
+		{
+			name:     "subset hint matches no endpoint, headers only",
+			pods:     pods,
+			requests: []*extProcPb.ProcessingRequest{headers(subsetMetadata("10.0.0.9"), true)},
+		},
+		{
+			name:     "subset hint matches no endpoint, request with body",
+			pods:     pods,
+			requests: []*extProcPb.ProcessingRequest{headers(subsetMetadata("10.0.0.9"), false), body},
+		},
+		{
+			name:     "empty subset hint",
+			pods:     pods,
+			requests: []*extProcPb.ProcessingRequest{headers(subsetMetadata(), true)},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := NewStreamingServer(&mockDatastore{pods: tc.pods})
+			stream := &mockProcessServer{ctx: t.Context(), recvMessages: tc.requests}
+
+			require.NoError(t, server.Process(stream))
+			require.Len(t, stream.sentMessages, 1)
+			immediate := stream.sentMessages[0].GetImmediateResponse()
+			require.NotNil(t, immediate, "the only response must be an ImmediateResponse")
+			assert.Equal(t, envoyTypePb.StatusCode_ServiceUnavailable, immediate.GetStatus().GetCode())
+		})
 	}
 }
