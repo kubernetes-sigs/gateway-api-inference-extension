@@ -108,8 +108,8 @@ const maxRequestBodySize = 10 * 1024 * 1024 // 10MB
 // endpoint picker protocol requires when there is no ready endpoint or none of the endpoints
 // in the subset hint is eligible. Failing the stream instead lets a data plane configured to
 // fail open route the request to an endpoint outside the subset.
-func sendUnavailable(srv extProcPb.ExternalProcessor_ProcessServer, err error) error {
-	log.FromContext(srv.Context()).Info("No endpoint available, responding with 503", "reason", status.Convert(err).Message())
+func sendUnavailable(ctx context.Context, srv extProcPb.ExternalProcessor_ProcessServer, err error) error {
+	log.FromContext(ctx).Info("No endpoint available, responding with 503", "reason", status.Convert(err).Message())
 	resp := &extProcPb.ProcessingResponse{
 		Response: &extProcPb.ProcessingResponse_ImmediateResponse{
 			ImmediateResponse: &extProcPb.ImmediateResponse{
@@ -157,7 +157,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			logger.Info("Received request headers")
 			err = s.handleRequestHeaders(ctx, reqCtx, req, v)
 			if status.Code(err) == codes.Unavailable {
-				return sendUnavailable(srv, err)
+				return sendUnavailable(ctx, srv, err)
 			}
 			if err != nil {
 				logger.Error(err, "Failed to handle request headers")
@@ -168,7 +168,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			if v.RequestHeaders.EndOfStream {
 				err = s.pickEndpoint(ctx, reqCtx, nil)
 				if status.Code(err) == codes.Unavailable {
-					return sendUnavailable(srv, err)
+					return sendUnavailable(ctx, srv, err)
 				}
 				if err != nil {
 					logger.Error(err, "Failed to pick endpoint")
@@ -240,7 +240,7 @@ func (s *StreamingServer) Process(srv extProcPb.ExternalProcessor_ProcessServer)
 			if v.RequestBody.EndOfStream {
 				err = s.pickEndpoint(ctx, reqCtx, body)
 				if status.Code(err) == codes.Unavailable {
-					return sendUnavailable(srv, err)
+					return sendUnavailable(ctx, srv, err)
 				}
 				if err != nil {
 					logger.Error(err, "Failed to pick endpoint")
