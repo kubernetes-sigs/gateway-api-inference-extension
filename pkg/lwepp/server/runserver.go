@@ -55,9 +55,6 @@ type ExtProcServerRunner struct {
 // Note: Dependencies like Datastore, Scheduler, SD need to be set separately.
 func NewDefaultExtProcServerRunner() *ExtProcServerRunner {
 	opts := NewOptions()
-	if opts.PoolNamespace == "" {
-		opts.PoolNamespace = DefaultPoolNamespace
-	}
 
 	gknn := common.GKNN{
 		NamespacedName: types.NamespacedName{Name: opts.PoolName, Namespace: opts.PoolNamespace},
