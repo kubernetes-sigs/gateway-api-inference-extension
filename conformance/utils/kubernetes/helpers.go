@@ -165,16 +165,8 @@ func InferencePoolMustHaveOneOfConditions(t *testing.T, c client.Reader, poolNN 
 			debugMsg += "\nInferencePool was not found or not observed successfully during polling."
 		}
 
-		var conditionStrings []string
-		for _, cond := range expectedConditions {
-			str := fmt.Sprintf("Type=%s, Status=%s", cond.Type, cond.Status)
-			if cond.Reason != "" {
-				str += fmt.Sprintf(", Reason='%s'", cond.Reason)
-			}
-			str = fmt.Sprintf("{%s}", str)
-		}
 		finalMsg := fmt.Sprintf("timed out or condition not met for InferencePool %s to have one of conditions {%s}",
-			poolNN.String(), strings.Join(conditionStrings, ", "))
+			poolNN.String(), formatExpectedConditions(expectedConditions))
 		finalMsg += "." + debugMsg
 		require.FailNow(t, finalMsg)
 	}
@@ -185,6 +177,20 @@ func InferencePoolMustHaveOneOfConditions(t *testing.T, c client.Reader, poolNN 
 		logMsg += fmt.Sprintf(", Reason='%s'", matchedExpectedCondition.Reason)
 	}
 	t.Log(logMsg)
+}
+
+// formatExpectedConditions renders the expected conditions for the failure message of
+// InferencePoolMustHaveOneOfConditions.
+func formatExpectedConditions(expectedConditions []metav1.Condition) string {
+	conditionStrings := make([]string, 0, len(expectedConditions))
+	for _, cond := range expectedConditions {
+		str := fmt.Sprintf("Type=%s, Status=%s", cond.Type, cond.Status)
+		if cond.Reason != "" {
+			str += fmt.Sprintf(", Reason='%s'", cond.Reason)
+		}
+		conditionStrings = append(conditionStrings, fmt.Sprintf("{%s}", str))
+	}
+	return strings.Join(conditionStrings, ", ")
 }
 
 // InferencePoolMustHaveNoParents waits for the specified InferencePool resource
