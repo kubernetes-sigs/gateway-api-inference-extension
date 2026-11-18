@@ -1132,6 +1132,42 @@ func TestExtractActivePorts(t *testing.T) {
 			validPorts:    []int{8000, 8001, 8002},
 			expectedPorts: sets.New(8000),
 		},
+		{
+			name: "Pod with trailing garbage after a valid port number",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Namespace:   "default",
+					Annotations: map[string]string{activePortsAnnotation: "8000abc,8002"},
+				},
+			},
+			validPorts:    []int{8000, 8001, 8002},
+			expectedPorts: sets.New(8002),
+		},
+		{
+			name: "Pod with space separated numbers in a single entry",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Namespace:   "default",
+					Annotations: map[string]string{activePortsAnnotation: "8000 8001,8002"},
+				},
+			},
+			validPorts:    []int{8000, 8001, 8002},
+			expectedPorts: sets.New(8002),
+		},
+		{
+			name: "Pod with non-integer numeric port in annotation",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test-pod",
+					Namespace:   "default",
+					Annotations: map[string]string{activePortsAnnotation: "8000.5,8002"},
+				},
+			},
+			validPorts:    []int{8000, 8001, 8002},
+			expectedPorts: sets.New(8002),
+		},
 	}
 
 	for _, tt := range tests {

@@ -315,8 +315,10 @@ func extractActivePorts(pod *corev1.Pod, targetPorts []int) sets.Set[int] {
 	activePorts := sets.New[int]()
 	portStrs := strings.SplitSeq(portsAnnotation, ",")
 	for portStr := range portStrs {
-		var portNum int
-		_, err := fmt.Sscanf(strings.TrimSpace(portStr), "%d", &portNum)
+		// strconv.Atoi parses the whole entry, so values with trailing garbage
+		// (e.g. "8000abc", "8000 8001" or "8000.5") are rejected instead of being
+		// silently coerced to a valid port number.
+		portNum, err := strconv.Atoi(strings.TrimSpace(portStr))
 		if err == nil && portNum > 0 && allPorts.Has(portNum) {
 			activePorts.Insert(portNum)
 		}
