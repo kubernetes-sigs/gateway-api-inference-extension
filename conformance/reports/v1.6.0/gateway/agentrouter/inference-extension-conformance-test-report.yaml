@@ -1,0 +1,25 @@
+GatewayAPIInferenceExtensionVersion: v1.6.2
+apiVersion: gateway.networking.k8s.io/v1
+date: "2026-11-17T14:37:37Z"
+gatewayAPIChannel: experimental
+gatewayAPIVersion: v1.6.1
+implementation:
+  contact:
+  - '@envoy-ai-gateway/maintainers'
+  organization: theagentrouter
+  project: agent-router
+  url: https://github.com/theagentrouter/agent-router
+  version: v1.3.0
+kind: ConformanceReport
+mode: default
+profiles:
+- core:
+    result: partial
+    skippedTests:
+    - GatewayWeightedAcrossTwoInferencePools
+    statistics:
+      Failed: 0
+      Passed: 13
+      Skipped: 1
+  name: Gateway
+  summary: Core tests partially succeeded with 1 test skips.
