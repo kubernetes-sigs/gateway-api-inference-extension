@@ -8,6 +8,7 @@ This project has several conformant Gateway implementations:
   - [Agentgateway](#agentgateway)
   - [Higress](#higress)
   - [NGINX Gateway Fabric](#nginx-gateway-fabric)
+  - [Agent Router](#agent-router)
 
 Agentgateway supports both standalone and Kubernetes deployment modes.
 
@@ -79,3 +80,20 @@ Source code, documentation, and issue tracking are available in the
 [nginx-gateway-fabric]: https://github.com/nginx/nginx-gateway-fabric
 [nginx]:https://nginx.org/
 [nginx-docs]:https://docs.nginx.com/nginx-gateway-fabric/
+
+## Agent Router
+
+[Agent Router][agent-router-home] (formerly Envoy AI Gateway) is an open source project built on top of
+[Envoy][envoy-org] and [Envoy Gateway][envoy-gateway] to handle request traffic
+from application clients to GenAI services. The features and capabilities are outlined [here][agent-router-capabilities].
+Use the [quickstart][agent-router-quickstart] to get Agent Router running with Gateway API in a few simple steps.
+
+Agent Router v1.3.0 passes the Gateway profile for Gateway API Inference Extension v1.6.2.
+See the [conformance report][agent-router-report].
+
+[agent-router-home]:https://theagentrouter.ai/
+[envoy-org]:https://github.com/envoyproxy
+[envoy-gateway]:https://gateway.envoyproxy.io/
+[agent-router-capabilities]:https://theagentrouter.ai/docs/capabilities/
+[agent-router-quickstart]:https://theagentrouter.ai/docs/capabilities/inference/inferencepool-support
+[agent-router-report]:https://github.com/kubernetes-sigs/gateway-api-inference-extension/tree/main/conformance/reports/v1.6.0/gateway/agentrouter
