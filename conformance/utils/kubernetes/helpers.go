@@ -358,6 +358,8 @@ func GetPodsWithLabel(t *testing.T, c client.Reader, namespace string, labels ma
 
 // MakeServiceUnavailable modifies a Service's selector to make it temporarily unavailable.
 // It returns a cleanup function to restore the original selector and ensure the test state is clean.
+// The cleanup function is non-nil whenever the selector was changed, including when waiting
+// for the EndpointSlices to drain fails, so callers must register it before checking the error.
 func MakeServiceUnavailable(t *testing.T, c client.Client, serviceRef types.NamespacedName, timeout time.Duration) (func(), error) {
 	t.Helper()
 
@@ -373,13 +375,6 @@ func MakeServiceUnavailable(t *testing.T, c client.Client, serviceRef types.Name
 	if err := c.Update(ctx, svc); err != nil {
 		return nil, fmt.Errorf("failed to update selector for Service %s/%s: %w", serviceRef.Namespace, serviceRef.Name, err)
 	}
-
-	t.Logf("Waiting for EndpointSlices of Service %s/%s to become empty...", serviceRef.Namespace, serviceRef.Name)
-	err := waitNumberOfEndpointsForService(ctx, c, serviceRef, 0, timeout)
-	if err != nil {
-		return nil, fmt.Errorf("timed out waiting for EndpointSlices of Service %s/%s to become empty: %w", serviceRef.Namespace, serviceRef.Name, err)
-	}
-	t.Logf("Successfully modified selector for Service %s/%s", serviceRef.Namespace, serviceRef.Name)
 
 	cleanupFunc := func() {
 		t.Helper()
@@ -404,6 +399,13 @@ func MakeServiceUnavailable(t *testing.T, c client.Client, serviceRef types.Name
 		}
 		t.Logf("Successfully restored selector for Service %s/%s", serviceRef.Namespace, serviceRef.Name)
 	}
+
+	t.Logf("Waiting for EndpointSlices of Service %s/%s to become empty...", serviceRef.Namespace, serviceRef.Name)
+	if err := waitNumberOfEndpointsForService(ctx, c, serviceRef, 0, timeout); err != nil {
+		// The selector has already been changed, so the cleanup is still needed.
+		return cleanupFunc, fmt.Errorf("timed out waiting for EndpointSlices of Service %s/%s to become empty: %w", serviceRef.Namespace, serviceRef.Name, err)
+	}
+	t.Logf("Successfully modified selector for Service %s/%s", serviceRef.Namespace, serviceRef.Name)
 	return cleanupFunc, nil
 }
 

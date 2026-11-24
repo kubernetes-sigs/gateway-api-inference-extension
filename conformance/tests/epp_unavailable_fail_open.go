@@ -98,7 +98,9 @@ var EppUnAvailableFailOpen = suite.ConformanceTest{
 			t.Logf("Making EPP service %v unavailable...", resources.SecondaryEppServiceNN)
 			timeconfig := config.DefaultInferenceExtensionTimeoutConfig()
 			restore, err := k8sutils.MakeServiceUnavailable(t, s.Client, resources.SecondaryEppServiceNN, timeconfig.ServiceUpdateTimeout)
-			t.Cleanup(restore)
+			if restore != nil {
+				t.Cleanup(restore)
+			}
 			require.NoError(t, err, "Failed to make the EPP service %v unavailable", resources.SecondaryEppServiceNN)
 
 			t.Log("Sending request again, expecting success to verify fail-open...")
