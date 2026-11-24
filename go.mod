@@ -24,7 +24,7 @@ require (
 	k8s.io/client-go v0.37.2
 	k8s.io/code-generator v0.37.2
 	k8s.io/utils v0.0.0-20260626114624-be93311217bd // indirect
-	sigs.k8s.io/controller-runtime v0.25.2
+	sigs.k8s.io/controller-runtime v0.25.3
 	// Update the CONTROLLER_TOOLS_VERSION in Makefile when bumping controller-tools.
 	sigs.k8s.io/controller-tools v0.23.0
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2
@@ -87,7 +87,7 @@ require (
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.24.0 // indirect
+	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
