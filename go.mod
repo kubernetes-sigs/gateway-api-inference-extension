@@ -33,7 +33,7 @@ require (
 
 require (
 	github.com/go-logr/zapr v1.3.0
-	github.com/spf13/pflag v1.0.10
+	github.com/spf13/pflag v1.1.0
 )
 
 require (
