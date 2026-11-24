@@ -49,6 +49,28 @@ routing. See the [Istio documentation](https://istio.io/latest/docs/tasks/traffi
 for installation and configuration instructions. Istio v1.28.0 or later is
 recommended to ensure compatibility with the InferencePool API.
 
+### ext_proc filter names on Istio InferencePool gateways
+
+If you add your own external processing (ext_proc) filter to an Istio Gateway
+that serves InferencePools (for example, through an EnvoyFilter), give it a
+distinct name, such as `envoy.filters.http.ext_proc.<component>`. Do not name
+it `envoy.filters.http.ext_proc`.
+
+A Gateway with an InferencePool attached gets Istio's own ext_proc filter under
+that name, and Istio stores that filter's per-route settings under the same
+name. Envoy looks up per-route filter settings by filter name, so every filter
+with that name gets them:
+
+- On routes to an InferencePool, the settings point at the pool's endpoint
+  picker (EPP). A same-named gRPC ext_proc filter sends its calls to the EPP
+  instead of its own service.
+- Since Istio 1.29.9, 1.30.6 and 1.31.2, the other backends in an HTTPRoute
+  rule that includes an InferencePool get a setting that turns ext_proc off,
+  which switches off every filter with that name for those backends.
+
+In both cases, the affected filter does not call its own service for those
+requests.
+
 ## Agentgateway
 
 [Agentgateway](https://agentgateway.dev/) is a high-performance, Rust-based AI
