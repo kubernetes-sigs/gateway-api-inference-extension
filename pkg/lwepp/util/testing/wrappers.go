@@ -155,6 +155,12 @@ func (m *InferencePoolWrapper) TargetPorts(p int32) *InferencePoolWrapper {
 	return m
 }
 
+// TargetPortsWithRoles replaces the wrapped InferencePool's targetPorts with the given ports.
+func (m *InferencePoolWrapper) TargetPortsWithRoles(ports ...v1.Port) *InferencePoolWrapper {
+	m.Spec.TargetPorts = ports
+	return m
+}
+
 func (m *InferencePoolWrapper) EndpointPickerRef(name string) *InferencePoolWrapper {
 	m.Spec.EndpointPickerRef = &v1.EndpointPickerRef{Name: v1.ObjectName(name)}
 	return m
